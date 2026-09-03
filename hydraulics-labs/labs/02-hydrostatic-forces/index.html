@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hydrostatic Forces on Submerged Surfaces</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../assets/vendor/katex/katex.min.css">
+<script defer src="../../assets/vendor/katex/katex.min.js"></script>
+<script defer src="../../assets/scripts/streem-math.js"></script>
+<style>
+  :root{
+    --bg:#f5f5f5; --panel:#ffffff; --panel2:#f0f0f0; --ink:#1d1d1b; --dim:#5c5c5c;
+    --accent:#e30613; --sub:#006d9c; --crit:#d00012; --sup:#e30613; --line:#d6d6d6;
+    --ok:#08783f; --violet:#5c257e; --water:#006d9c; --pressure:#005a85;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; overflow:hidden; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",system-ui,sans-serif;}
+  .panel{position:absolute; background:color-mix(in srgb, var(--panel) 92%, transparent);
+    border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+    backdrop-filter:blur(6px); font-size:13px; line-height:1.45; z-index:2;}
+  #ui{left:12px; top:12px; width:262px; max-height:calc(100% - 24px); overflow-y:auto;}
+  #side{right:12px; top:12px; width:400px; max-height:calc(100% - 24px); overflow-y:auto;}
+  #actions{left:50%; transform:translateX(-50%); bottom:12px; display:flex; gap:8px; padding:8px;
+    flex-wrap:wrap; justify-content:center; max-width:calc(100% - 728px);}
+  #stage{position:absolute; inset:0; padding:12px 426px 66px 288px;}
+  canvas.view{width:100%; height:100%; display:block; background:var(--panel);
+    border:1px solid var(--line); border-radius:10px;}
+  h1{font-size:14px; margin-bottom:2px; color:var(--accent);}
+  .sub{color:var(--dim); font-size:11px; margin-bottom:10px;}
+  h2{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim);
+    margin:12px 0 6px; border-bottom:1px solid var(--line); padding-bottom:3px;}
+  label.row{display:flex; justify-content:space-between; align-items:center; margin:7px 0 2px;
+    font-size:12.5px; gap:8px;}
+  label.row .val{color:var(--accent); font-variant-numeric:tabular-nums; font-weight:600;
+    white-space:nowrap;}
+  input[type=range]{width:100%; accent-color:var(--accent);}
+  input[type=range]:disabled{opacity:.35;}
+  .chk{display:flex; align-items:center; gap:7px; margin:6px 0; font-size:12.5px; cursor:pointer;}
+  .chk input{accent-color:var(--accent);}
+  button{background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    border-radius:7px; padding:7px 12px; font-size:12.5px; cursor:pointer;}
+  button:hover{border-color:var(--accent); color:var(--accent);}
+  button.active{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600;}
+  .seg{display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:4px;}
+  .seg button{padding:6px 4px; font-size:12px;}
+  .presets{display:flex; flex-direction:column; gap:5px; margin-top:4px;}
+  .presets button{text-align:left; padding:6px 9px; font-size:11.5px; line-height:1.3;}
+  table.vals{width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums;}
+  table.vals td{padding:2.5px 0; font-size:12.5px; vertical-align:top;}
+  table.vals td:first-child{color:var(--dim); padding-right:8px;}
+  table.vals td:last-child{text-align:right; font-weight:600; white-space:nowrap;}
+  .formula{font-family:Cambria,Georgia,serif; font-size:12.5px;
+    color:#353535; background:var(--panel2); border-radius:6px; padding:7px 9px; margin-top:6px;}
+  .formula .katex-display{margin:0; overflow-x:auto; overflow-y:hidden;}
+  .note{font-size:11px; color:var(--dim); margin-top:8px;}
+  .note b{color:var(--ink);}
+  #chip{margin-top:8px; padding:7px 10px; border-radius:7px; text-align:center; font-weight:700;
+    font-size:12.5px; background:var(--ok); color:#fff; letter-spacing:.03em;}
+  .ok{color:var(--ok);} .warn{color:var(--crit);}
+  .hidden{display:none;}
+  .tabs{display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;}
+  /* worked solution */
+  #stepbar{display:flex; align-items:center; gap:6px; margin:6px 0 2px;}
+  #stepbar button{padding:4px 9px; font-size:12px;}
+  #stepPos{color:var(--dim); font-size:11.5px; margin-left:auto;}
+  .step{border-left:3px solid var(--line); padding:7px 0 7px 10px; margin:9px 0;
+    opacity:.42; transition:opacity .15s;}
+  .step.on{opacity:1; border-left-color:var(--accent);}
+  .step.done{opacity:.72;}
+  .stepHead{font-size:12.5px; font-weight:600; color:var(--ink); margin-bottom:3px;}
+  .stepHead .num{display:inline-block; width:17px; height:17px; line-height:17px; text-align:center;
+    border-radius:50%; background:var(--panel2); color:var(--accent); font-size:10.5px;
+    margin-right:6px; border:1px solid var(--line);}
+  .why{font-size:11px; color:var(--dim); margin-bottom:5px;}
+  .eq{font-family:Cambria,Georgia,serif; font-size:13px; color:#303030; background:var(--panel2);
+    border-radius:5px; padding:5px 8px; margin-top:4px; font-variant-numeric:tabular-nums;}
+  .eq.sub{color:var(--dim); font-size:12.5px; background:transparent; padding:3px 8px;}
+  .eq.res{color:var(--crit); font-weight:700; background:rgba(173,95,0,.10);}
+  .answer{margin-top:12px; padding:9px 11px; border-radius:8px; background:rgba(8,120,63,.08);
+    border:1px solid rgba(8,120,63,.35); font-size:12.5px;}
+  .answer b{color:var(--ok);}
+  @media (max-width:1250px){
+    html,body{overflow-y:auto; height:auto; min-height:100%;}
+    body{display:flex; flex-direction:column;}
+    .panel{position:static; width:auto; max-height:none; margin:10px 12px 0; transform:none;}
+    #ui,#side{width:auto;}
+    #ui{order:1;} #stage{order:2; position:static; padding:10px 12px; height:620px;}
+    #actions{order:3; align-self:center; max-width:none;} #side{order:4; margin-bottom:12px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="ui" class="panel">
+  <h1>Hydrostatic Forces on Surfaces</h1>
+  <div class="sub">OpenHydroLab · plane (horizontal / vertical / inclined) &amp; curved surfaces</div>
+
+  <h2>Surface type</h2>
+  <div class="seg">
+    <button id="b-hor">Horizontal</button>
+    <button id="b-ver">Vertical</button>
+    <button id="b-inc" class="active">Inclined</button>
+    <button id="b-cur">Curved</button>
+  </div>
+
+  <div id="planeCtl">
+    <h2>Plane surface</h2>
+    <div>
+      <label class="row" for="s-th">Angle to free surface θ <span class="val" id="v-th"></span></label>
+      <input type="range" id="s-th" min="0" max="90" step="0.5" value="30">
+    </div>
+    <div>
+      <label class="row" for="s-L">Plate length along plane L <span class="val" id="v-L"></span></label>
+      <input type="range" id="s-L" min="0.5" max="16" step="0.05" value="3">
+    </div>
+    <div>
+      <label class="row" for="s-ht"><span>Depth of upper edge h<sub>top</sub></span> <span class="val" id="v-ht"></span></label>
+      <input type="range" id="s-ht" min="0" max="12" step="0.05" value="2">
+    </div>
+  </div>
+
+  <div id="curvedCtl" class="hidden">
+    <h2>Curved surface (circular arc)</h2>
+    <div>
+      <label class="row" for="s-R">Radius R <span class="val" id="v-R"></span></label>
+      <input type="range" id="s-R" min="0.4" max="6" step="0.05" value="2">
+    </div>
+    <div>
+      <label class="row" for="s-hO"><span>Depth of pivot O, h<sub>O</sub></span> <span class="val" id="v-hO"></span></label>
+      <input type="range" id="s-hO" min="0" max="12" step="0.05" value="3">
+    </div>
+    <div>
+      <label class="row" for="s-span">Arc span <span class="val" id="v-span"></span></label>
+      <input type="range" id="s-span" min="15" max="90" step="0.5" value="90">
+    </div>
+    <label class="chk"><input type="checkbox" id="t-side"> <span>Fluid <b>above</b> the arc &mdash; F<sub>v</sub> acts downward, real volume</span></label>
+  </div>
+
+  <h2>Fluid &amp; geometry</h2>
+  <div>
+    <label class="row" for="s-b">Width into the page b <span class="val" id="v-b"></span></label>
+    <input type="range" id="s-b" min="0.2" max="10" step="0.05" value="2">
+  </div>
+  <div>
+    <label class="row" for="s-rho">Density ρ <span class="val" id="v-rho"></span></label>
+    <input type="range" id="s-rho" min="700" max="13600" step="10" value="1000">
+  </div>
+
+  <h2>Show</h2>
+  <label class="chk"><input type="checkbox" id="t-arrows" checked> Pressure distribution arrows</label>
+  <label class="chk"><input type="checkbox" id="t-dims" checked> Dimensions &amp; depth grid</label>
+  <label class="chk"><input type="checkbox" id="t-probe" checked> Travelling pressure probe (drag it)</label>
+  <label class="chk"><input type="checkbox" id="t-vol" checked> Vertical prism above the arc</label>
+
+  <div id="chip">INCLINED PLANE SURFACE</div>
+
+  <h2>Presets from the worked problems</h2>
+  <div class="presets">
+    <button id="p1">Vertical plate — B=1 m, L=2.5 m, top edge at the surface</button>
+    <button id="p2">Dam face at 45° — 10 m deep, per metre width</button>
+    <button id="p3">Inclined gate at 30° — hinged 2 m below the surface</button>
+    <button id="p4">Gate on a shaft at 53.13° — 3.5 m × 2 m</button>
+    <button id="p5">Quadrant gate — R=1 m, 3 m wide, O at the surface</button>
+    <button id="p6">Radial gate — R=2 m, 2 m wide, O at 3 m depth</button>
+  </div>
+
+  <div class="note" id="ahaNote"></div>
+</div>
+
+<div id="side" class="panel">
+  <div class="tabs">
+    <button id="tab-work" class="active">Worked solution</button>
+    <button id="tab-read">Readout</button>
+  </div>
+  <div id="work">
+    <div id="stepbar">
+      <button id="w-prev">◀</button><button id="w-next">▶</button>
+      <button id="w-all" class="active">Show all</button>
+      <span id="stepPos"></span>
+    </div>
+    <div id="steps"></div>
+  </div>
+  <div id="readout" class="hidden"></div>
+</div>
+
+<div id="stage"><canvas id="cv" class="view"></canvas></div>
+
+<div id="actions" class="panel">
+  <button id="b-sweep">▶ Sweep submergence</button>
+  <button id="b-pause">⏸ Pause</button>
+  <button id="b-reset">Reset</button>
+</div>
+
+<script>
+'use strict';
+/* ==========================================================================
+   PHYSICS  —  hydrostatic force on a submerged surface
+   Plane surface (Munson Eq. 2.18 / 2.19):
+       F_R = γ h_c A ,   y_R = y_c + I_xc/(y_c A)
+   Curved surface:
+       F_x = γ h_c A_proj  on the vertical projection
+       F_v = γ V           weight of the vertical fluid prism between the
+                           surface and the free-surface level
+   Everything below is the governing equation, not a fitted curve.  A second,
+   independent high-resolution quadrature of  ∮ p dA  is carried out every
+   frame and the two are compared on screen.
+   ========================================================================== */
+const G = 9.81;                     // m/s²
+
+const st = {
+  mode : 'plane',                   // 'plane' | 'curved'
+  // plane surface
+  theta: 30,                        // ° between the plane and the free surface
+  L    : 3.0,                       // m, length along the plane
+  hTop : 2.0,                       // m, depth of the upper edge
+  // curved surface
+  R    : 2.0,                       // m, arc radius
+  hO   : 3.0,                       // m, depth of the pivot O
+  span : 90,                        // ° of arc, measured up from the invert C
+  above: false,                     // true → fluid sits on top of the arc
+  // common
+  b    : 2.0,                       // m, width into the page
+  rho  : 1000,                      // kg/m³
+  // view
+  arrows:true, dims:true, probeOn:true, volOn:true,
+  probe :0.55,                      // 0..1 along the wetted surface
+  drag  :false, sweep:false, paused:false,
+  step  :0, tab:'work'              // 0 = show every step of the worked solution
+};
+
+const clamp = (v,a,bb) => Math.min(bb, Math.max(a, v));
+
+/* ---------- unit-aware formatting ---------------------------------------- */
+function fmtF(N){                                  // force
+  if(!isFinite(N)) return '—';
+  const a=Math.abs(N);
+  if(a>=1e6) return (N/1e6).toFixed(3)+' MN';
+  if(a>=1e3) return (N/1e3).toFixed(2)+' kN';
+  return N.toFixed(1)+' N';
+}
+function fmtM(N){                                  // moment
+  if(!isFinite(N)) return '—';
+  if(Math.abs(N)<0.05) N=0;
+  const a=Math.abs(N);
+  if(a>=1e6) return (N/1e6).toFixed(3)+' MN·m';
+  if(a>=1e3) return (N/1e3).toFixed(2)+' kN·m';
+  return N.toFixed(1)+' N·m';
+}
+const m2  = v => (isFinite(v)? v.toFixed(3)+' m' : '∞');
+const kPa = v => (v/1000).toFixed(2)+' kPa';
+
+/* ---------- plane surface ------------------------------------------------- */
+function solvePlane(){
+  const th = st.theta*Math.PI/180, s = Math.sin(th), c = Math.cos(th);
+  const L = st.L, b = st.b, rho = st.rho, hTop = st.hTop;
+
+  const hBot = hTop + L*s;                       // depth of the lower edge
+  const hc   = hTop + 0.5*L*s;                   // depth of the centroid
+  const A    = L*b;
+  const F    = rho*G*hc*A;                       // F_R = γ h_c A
+  const Ixc  = b*L*L*L/12;                       // second moment about the centroidal axis
+
+  // y is measured along the plane from the free-surface line.  y_c = h_c/sinθ
+  // diverges for a horizontal surface, but the PRODUCT that matters does not:
+  //     Δy = I_xc /(y_c A) = L² sinθ /(12 h_c)      → 0 as θ → 0
+  const yc = (s > 1e-9) ? hc/s : Infinity;
+  const dy = (hc > 1e-12) ? L*L*s/(12*hc) : 0;
+  const yR = yc + dy;
+  const sR = L/2 + dy;                           // centre of pressure from the upper edge
+  const hR = hTop + sR*s;                        // its depth
+
+  const pTop = rho*G*hTop, pBot = rho*G*hBot, pC = rho*G*hc;
+
+  // ---- independent check: direct quadrature of ∮p dA and of ∮ s p dA -------
+  const N = 4000, ds = L/N;
+  let Fn = 0, Mn = 0;
+  for(let i=0;i<N;i++){
+    const si = (i+0.5)*ds;
+    const p  = rho*G*(hTop + si*s);
+    const dA = ds*b;
+    Fn += p*dA;  Mn += p*dA*si;
+  }
+  const sRn = (Fn>0) ? Mn/Fn : L/2;
+
+  return {th,s,c,L,b,rho,hTop,hBot,hc,A,F,Ixc,yc,dy,yR,sR,hR,pTop,pBot,pC,
+          Fn, sRn,
+          fChk:(F>0? Fn/F : 1), sChk:(sR>0? sRn/sR : 1),
+          Mtop:F*sR, Mbot:F*(L-sR)};
+}
+
+/* ---------- curved surface (circular arc, pivot O) ------------------------ */
+/* The arc runs from φ₁ = 270° − span to φ₂ = 270°, measured about O, so its
+   lower end C is directly below O and its upper end A is up and to the left. */
+function solveCurved(){
+  const R = st.R, b = st.b, rho = st.rho, hO = st.hO;
+  const spanR = st.span*Math.PI/180;
+  const phi1 = 1.5*Math.PI - spanR, phi2 = 1.5*Math.PI;
+  const s = clamp(-Math.sin(phi1),0,1), c = clamp(-Math.cos(phi1),0,1);   // s,c ∈ [0,1]
+
+  // ---- horizontal component: the vertical projection is a plane surface ---
+  const Hp   = R*(1-s);                    // height of the projection
+  const hTopP= hO + R*s;                   // depth of its upper edge
+  const hcP  = hO + R*(1+s)/2;             // depth of its centroid
+  const Ap   = Hp*b;
+  const Fx   = rho*G*hcP*Ap;               // F_x = γ h_c A_proj
+  const dyx  = (hcP>1e-12) ? Hp*Hp/(12*hcP) : 0;
+  const hRx  = hcP + dyx;                  // depth of the line of action of F_x
+  const armX = hRx - hO;                   // its lever arm below O
+
+  // ---- vertical component: weight of the prism between arc and free surface
+  //      V = b ∫ (h_O + √(R²−x²)) dx  from x = −Rc to 0
+  const V  = b*( hO*R*c + R*R*(c*s + Math.asin(clamp(c,-1,1)))/2 );
+  const Fv = rho*G*V;
+  //      centroid of that prism, measured horizontally from O
+  const num = hO*R*R*c*c/2 + R*R*R*(1 - s*s*s)/3;
+  const den = hO*R*c + R*R*(c*s + Math.asin(clamp(c,-1,1)))/2;
+  const xbar = (den>1e-12) ? num/den : 0;
+
+  const FR = Math.hypot(Fx,Fv);
+  const alpha = Math.atan2(Fv,Fx)*180/Math.PI;
+
+  // ---- independent check: quadrature of ∮ p n dA over the arc -------------
+  const N = 4000, dphi = (phi2-phi1)/N;
+  let Fxn=0, Fzn=0, Mx=0, Mv=0;
+  for(let i=0;i<N;i++){
+    const ph = phi1 + (i+0.5)*dphi;
+    const h  = hO - R*Math.sin(ph);            // depth of this point
+    if(h<=0) continue;
+    const p  = rho*G*h, dA = R*dphi*b;
+    const fx = p*(-Math.cos(ph))*dA;           // traction is radial, toward O
+    const fz = p*(-Math.sin(ph))*dA;           // (+z is up)
+    Fxn += fx;  Fzn += fz;
+    // moments about O of each component, taken separately
+    Mx += -(R*Math.sin(ph))*fx;                // horizontal traction × height
+    Mv +=  (R*Math.cos(ph))*fz;                // vertical traction × offset
+  }
+
+  return {R,b,rho,hO,span:st.span,s,c,phi1,phi2,
+          Hp,hTopP,hcP,Ap,Fx,dyx,hRx,armX,
+          V,Fv,xbar,FR,alpha,
+          Fxn,Fzn,Mx,Mv,
+          fxChk:(Fx>0? Fxn/Fx : 1), fvChk:(Fv>0? Fzn/Fv : 1),
+          Mfx:Fx*armX, Mfv:Fv*xbar,
+          Mnet:Fv*xbar - Fx*armX,
+          pA:rho*G*hTopP, pC:rho*G*(hO+R)};
+}
+
+let R_ = null;                                   // current solution
+function solve(){ R_ = (st.mode==='curved') ? solveCurved() : solvePlane(); return R_; }
+
+/* ---------- classification of the plane surface -------------------------- */
+function surfaceKind(){
+  if(st.mode==='curved') return 'CURVED SURFACE — ARC OF RADIUS R';
+  if(st.theta < 0.5)  return 'HORIZONTAL PLANE SURFACE';
+  if(st.theta > 89.5) return 'VERTICAL PLANE SURFACE';
+  return 'INCLINED PLANE SURFACE';
+}
+</script>
+
+<script>
+'use strict';
+/* ==========================================================================
+   RENDERING
+   ========================================================================== */
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+/* named ROOTCSS, not CSS: a top-level `const CSS` would shadow the standard
+   window.CSS global for anything evaluated in this page's scope. */
+const ROOTCSS = getComputedStyle(document.documentElement);
+const C = {
+  ink :ROOTCSS.getPropertyValue('--ink').trim(),
+  dim :ROOTCSS.getPropertyValue('--dim').trim(),
+  acc :ROOTCSS.getPropertyValue('--accent').trim(),
+  sub :ROOTCSS.getPropertyValue('--sub').trim(),
+  crit:ROOTCSS.getPropertyValue('--crit').trim(),
+  sup :ROOTCSS.getPropertyValue('--sup').trim(),
+  ok  :ROOTCSS.getPropertyValue('--ok').trim(),
+  vio :ROOTCSS.getPropertyValue('--violet').trim(),
+  line:ROOTCSS.getPropertyValue('--line').trim(),
+  pan :ROOTCSS.getPropertyValue('--panel').trim(),
+  pan2:ROOTCSS.getPropertyValue('--panel2').trim(),
+  water:ROOTCSS.getPropertyValue('--water').trim(),
+  pressure:ROOTCSS.getPropertyValue('--pressure').trim()
+};
+
+/* ---------- step-through emphasis ----------------------------------------
+   When the worked solution is being walked one step at a time, everything the
+   current step is not about fades back, so the drawing says the same thing the
+   text does.  'all' (the default) shows the complete scene.                  */
+let stepHL='all';
+/* What the last frame actually drew, in canvas pixels plus the scale to convert back
+   to metres. The scene's whole claim is geometric — the resultant arriving normal to
+   the plate, and passing through the pivot on a circular arc — and that claim lives in
+   the drawing, not in the readouts. Recording the endpoints lets a test measure the
+   line that was drawn instead of recomputing the line it thinks should have been. */
+const DRAWN = {};
+const HL2D = {
+  all  : null,
+  plate: ['tank','plate','dims'],
+  hc   : ['tank','plate','centroid','hcline'],
+  prism: ['tank','plate','prism'],
+  force: ['tank','plate','prism','force'],
+  yc   : ['tank','plate','centroid','ycline','hcline'],
+  dy   : ['tank','plate','centroid','force','dy'],
+  cp   : ['tank','plate','centroid','force','dy'],
+  gate : ['tank','gate','arrows','vol'],
+  fx   : ['tank','gate','proj','fx'],
+  fv   : ['tank','gate','vol','fv'],
+  fr   : ['tank','gate','proj','fx','fv','fr','arrows']   // step 7 talks about the arrows
+};
+function em(k){ const s=HL2D[stepHL]; return (!s || s.indexOf(k)>=0) ? 1 : 0.10; }
+function grp(k, fn){ ctx.save(); ctx.globalAlpha*=em(k); fn(); ctx.restore(); }
+
+let W=0,H=0,VP={scene:null,diag:null};
+function resize(){
+  const dpr = window.devicePixelRatio||1;
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  if(W/H < 1.02){ VP.scene={x:0,y:0,w:W,h:H*0.58};  VP.diag={x:0,y:H*0.58,w:W,h:H*0.42}; }
+  else          { VP.scene={x:0,y:0,w:W*0.615,h:H}; VP.diag={x:W*0.615,y:0,w:W*0.385,h:H}; }
+}
+window.addEventListener('resize',resize);
+
+/* ---------- primitives ---------------------------------------------------- */
+function txt(s,x,y,col,size,align,base,bold){
+  ctx.fillStyle=col; ctx.font=(bold?'600 ':'')+size+'px "Segoe UI",system-ui,sans-serif';
+  ctx.textAlign=align||'left'; ctx.textBaseline=base||'alphabetic';
+  ctx.fillText(s,x,y);
+}
+function line(x1,y1,x2,y2,col,w,dash){
+  ctx.save(); ctx.strokeStyle=col; ctx.lineWidth=w||1;
+  if(dash) ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.restore();
+}
+function arrow(x1,y1,x2,y2,col,w,head){
+  const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy);
+  if(L<0.6) return;
+  const ux=dx/L, uy=dy/L, hs=Math.min(head||7, L*0.55);
+  ctx.save(); ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=w||1.4;
+  ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2-ux*hs*0.85,y2-uy*hs*0.85); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-ux*hs - uy*hs*0.42, y2-uy*hs + ux*hs*0.42);
+  ctx.lineTo(x2-ux*hs + uy*hs*0.42, y2-uy*hs - ux*hs*0.42);
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function dot(x,y,r,col,ring){
+  ctx.save(); ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fillStyle=col; ctx.fill();
+  if(ring){ ctx.lineWidth=1.5; ctx.strokeStyle=ring; ctx.stroke(); } ctx.restore();
+}
+function chipLabel(s,x,y,col,size,align){
+  ctx.font='600 '+size+'px "Segoe UI",system-ui,sans-serif';
+  const padX=5, padY=4, w=Math.ceil(ctx.measureText(s).width)+2*padX, h=Math.ceil(size)+2*padY;
+  let x0=x; if(align==='center') x0=x-w/2; else if(align==='right') x0=x-w;
+  const a=ctx.globalAlpha;                       // respect any group emphasis
+  ctx.save(); ctx.globalAlpha=a*0.96; ctx.fillStyle='#ffffff';
+  ctx.beginPath(); ctx.roundRect(x0,y-h/2,w,h,5); ctx.fill();
+  ctx.globalAlpha=a; ctx.strokeStyle='#3f3f3f'; ctx.lineWidth=1; ctx.stroke(); ctx.restore();
+  txt(s,x0+padX,y+0.5,C.ink,size,'left','middle',true);
+}
+function hatch(pathFn,col,gap,alpha){
+  ctx.save(); ctx.beginPath(); pathFn(); ctx.clip();
+  ctx.globalAlpha *= (alpha||0.5); ctx.strokeStyle=col; ctx.lineWidth=1;
+  for(let d=-H-W; d<W+H; d+=(gap||9)){
+    ctx.beginPath(); ctx.moveTo(d,0); ctx.lineTo(d+H,H); ctx.stroke();
+  }
+  ctx.restore();
+}
+function niceStep(range,target){
+  const raw = range/target, p = Math.pow(10,Math.floor(Math.log10(raw))), n = raw/p;
+  return (n<1.5?1:n<3.5?2:n<7.5?5:10)*p;
+}
+function decOf(step){ return step>=1?1:(step>=0.1?2:3); }
+/* grow the slack world dimension so the drawing fills its viewport instead of
+   letterboxing — the extra is only container, never the surface itself */
+function fitWorld(vp,padX,padT,padB,wW,wH,maxGrow){
+  const aw=vp.w-2*padX, ah=vp.h-padT-padB, g=maxGrow||1.6;
+  if(wW/wH > aw/ah) wH = Math.min(wH*g, wW*ah/aw);
+  else              wW = Math.min(wW*g, wH*aw/ah);
+  const sc = Math.min(aw/wW, ah/wH);
+  return {wW,wH,sc, ox:(aw-wW*sc)/2, oy:(ah-wH*sc)/2};
+}
+
+/* ---------- water body ---------------------------------------------------- */
+function waterFill(x0,y0,x1,y1){
+  const g = ctx.createLinearGradient(0,y0,0,y1);
+  g.addColorStop(0,'rgba(207,238,248,0.48)');
+  g.addColorStop(1,'rgba(143,211,235,0.68)');
+  return g;
+}
+function rippleY(x,y0,amp){ return y0 + amp*Math.sin(x*0.055 + simT*1.4) + amp*0.5*Math.sin(x*0.11 - simT*0.9); }
+function freeSurface(x0,x1,y0,col){
+  ctx.save(); ctx.strokeStyle=col; ctx.lineWidth=1.8; ctx.beginPath();
+  for(let x=x0;x<=x1;x+=3){ const y=rippleY(x,y0,1.4); if(x===x0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+  ctx.stroke(); ctx.restore();
+}
+
+/* ==========================================================================
+   SCENE — plane surface
+   ========================================================================== */
+let mapPlane=null, mapCurved=null;     // world→screen, kept for hit-testing
+
+function drawPlaneScene(vp,R){
+  const padT=48, padB=30, padX=54;
+  let hFloor = Math.max(R.hBot*1.16 + 0.35, 0.9);
+  let halfW  = Math.max(R.L*R.c*0.78 + 0.55, hFloor*0.34, 0.9);
+  const fit = fitWorld(vp,padX,padT,padB, 2*halfW, hFloor, 1.28);
+  halfW = fit.wW/2; hFloor = fit.wH;
+  const sc = fit.sc;
+  const X0 = vp.x+vp.w/2, Y0 = vp.y+padT+fit.oy;
+  const sx = X => X0 + X*sc, sy = h => Y0 + h*sc;
+  mapPlane = {sc,X0,Y0,sx,sy};
+
+  const xL=sx(-halfW), xR=sx(halfW), yS=sy(0), yF=sy(hFloor);
+
+  // water body
+  ctx.fillStyle = waterFill(xL,yS,xR,yF);
+  ctx.fillRect(xL,yS,xR-xL,yF-yS);
+
+  // depth grid
+  if(st.dims){
+    const step = niceStep(hFloor,5), d=decOf(step);
+    for(let h=step;h<hFloor-1e-9;h+=step){
+      const y=sy(h);
+      line(xL,y,xR,y,'rgba(154,167,189,0.16)',1,[3,5]);
+      txt(h.toFixed(d)+' m', xL+4, y-3, 'rgba(154,167,189,0.72)', 10);
+    }
+  }
+
+  // tank
+  line(xL,yS,xL,yF,C.line,2); line(xR,yS,xR,yF,C.line,2);
+  ctx.fillStyle='#28324a'; ctx.fillRect(xL-2,yF,xR-xL+4,7);
+  freeSurface(xL,xR,yS,C.water);
+  txt('free surface   p = 0 (gauge)', xL+6, yS-8, C.ink, 11, 'left', 'alphabetic', true);
+
+  // plate end points, in (x, depth)
+  const xa=-R.L*R.c/2, xb= R.L*R.c/2;
+  const Ax=sx(xa), Ay=sy(R.hTop), Bx=sx(xb), By=sy(R.hBot);
+  const ux=(Bx-Ax), uy=(By-Ay), Lp=Math.hypot(ux,uy)||1;
+  const tx=ux/Lp, ty=uy/Lp;                 // unit vector along the plate (screen)
+  const nx= R.s, ny=-R.c;                   // unit normal on the WET side (screen)
+
+  // pressure distribution: arrows and the in-place pressure prism
+  const pMax = Math.max(R.pBot, 1e-9);
+  const aMax = Math.min(vp.w*0.17, vp.h*0.20, 112);
+  const alen = p => (p/pMax)*aMax;
+  if(st.arrows) grp('prism',()=>{
+    // prism outline (tails of the arrows)
+    ctx.beginPath();
+    ctx.moveTo(Ax,Ay);
+    ctx.lineTo(Ax+nx*alen(R.pTop), Ay+ny*alen(R.pTop));
+    ctx.lineTo(Bx+nx*alen(R.pBot), By+ny*alen(R.pBot));
+    ctx.lineTo(Bx,By); ctx.closePath();
+    ctx.fillStyle='rgba(0,90,133,0.10)'; ctx.fill();
+    ctx.strokeStyle='rgba(0,90,133,0.70)'; ctx.lineWidth=1.2; ctx.stroke();
+
+    const n=16;
+    for(let i=0;i<=n;i++){
+      const f=i/n, X=Ax+ux*f, Y=Ay+uy*f;
+      const p=R.pTop+(R.pBot-R.pTop)*f, l=alen(p);
+    if(l>1.5) arrow(X+nx*l, Y+ny*l, X, Y, C.pressure, 1.7, 7);
+    }
+  });
+
+  const dnx=-nx, dny=-ny;                   // dry-side normal
+  const cxp=Ax+ux*0.5, cyp=Ay+uy*0.5;
+  const rxp=Ax+ux*(R.sR/R.L), ryp=Ay+uy*(R.sR/R.L);
+  const shift = Math.min(56, Lp*0.30);
+
+  // the plate
+  grp('plate',()=>{
+    ctx.save(); ctx.lineCap='butt'; ctx.strokeStyle='#1d1d1b'; ctx.lineWidth=9.5;
+    ctx.beginPath(); ctx.moveTo(Ax,Ay); ctx.lineTo(Bx,By); ctx.stroke();
+    ctx.strokeStyle='#ffffff'; ctx.lineWidth=6.5; ctx.stroke();
+    ctx.restore();
+    chipLabel('A', Ax-tx*13+dnx*11, Ay-ty*13+dny*11, C.dim, 10.5, 'center');
+    chipLabel('B', Bx+tx*13+dnx*11, By+ty*13+dny*11, C.dim, 10.5, 'center');
+  });
+
+  // y_c — measured along the plane from where it would cut the free surface
+  if(isFinite(R.yc) && R.yc<40) grp('ycline',()=>{
+    const O0x = Ax - tx*(R.hTop/Math.max(R.s,1e-6))*sc, O0y = Ay - ty*(R.hTop/Math.max(R.s,1e-6))*sc;
+    line(O0x,O0y,cxp,cyp,C.vio,1.6,[6,4]);
+    dot(O0x,O0y,4,'#0f1420',C.vio);
+    chipLabel('y_c = '+R.yc.toFixed(3)+' m', (O0x+cxp)/2+dnx*18, (O0y+cyp)/2+dny*18, C.vio,10.5,'center');
+  });
+
+  // h_c — the vertical drop to the centroid
+  grp('hcline',()=>{
+    line(cxp,sy(0),cxp,cyp,C.ok,1.6,[5,4]);
+    arrow(cxp,sy(0),cxp,cyp,C.ok,1.2,6); arrow(cxp,cyp,cxp,sy(0),C.ok,1.2,6);
+    chipLabel('h_c = '+R.hc.toFixed(3)+' m', cxp+8, (sy(0)+cyp)/2, C.ok, 10.5,'left');
+  });
+
+  // centroid & centre of pressure — every annotation on the dry side
+  grp('centroid',()=>{
+    dot(cxp,cyp,4.2,'#0f1420',C.dim);
+    chipLabel('centroid', cxp+dnx*19-tx*shift, cyp+dny*19-ty*shift, C.dim, 10.5, 'center');
+  });
+  if(R.dy>1e-4 && Math.hypot(rxp-cxp,ryp-cyp)>6) grp('dy',()=>{
+    const o=17;
+    line(cxp,cyp,cxp+dnx*o,cyp+dny*o,C.crit,1,[2,3]);
+    line(rxp,ryp,rxp+dnx*o,ryp+dny*o,C.crit,1,[2,3]);
+    arrow(cxp+dnx*o,cyp+dny*o, rxp+dnx*o,ryp+dny*o, C.crit, 1.3, 5.5);
+    chipLabel('Δy = '+R.dy.toFixed(3)+' m',
+              rxp+dnx*19+tx*shift, ryp+dny*19+ty*shift, C.crit, 10.5, 'center');
+  });
+
+  // resultant — the water is on the wet side, so it pushes ONTO the plate
+  const fl = aMax*1.20 + 26;
+  DRAWN.plane = {x0:rxp+nx*fl, y0:ryp+ny*fl, x1:rxp, y1:ryp,
+                 cpx:rxp, cpy:ryp, ax:Ax, ay:Ay, bx:Bx, by:By, pxPerM:sc, L:R.L};
+  grp('force',()=>{
+    dot(rxp,ryp,5.2,C.crit,'#0f1420');
+    arrow(rxp+nx*fl, ryp+ny*fl, rxp, ryp, C.crit, 3.6, 13);
+    chipLabel('F_R = '+fmtF(R.F)+'  at the CP',
+              rxp+nx*(fl+15), ryp+ny*(fl+15), C.crit, 11.5, 'center');
+  });
+
+  // dimensions
+  if(st.dims) grp('dims',()=>{
+    const dxp = Ax - Math.max(34, R.L*R.c*sc*0.12);
+    if(Ay-sy(0)>18){
+      line(dxp-14,sy(0),dxp+8,sy(0),'rgba(154,167,189,0.5)',1);
+      line(dxp-14,Ay,dxp+8,Ay,'rgba(154,167,189,0.5)',1);
+      arrow(dxp,sy(0),dxp,Ay,C.dim,1.1,6); arrow(dxp,Ay,dxp,sy(0),C.dim,1.1,6);
+      chipLabel('h_top = '+R.hTop.toFixed(2)+' m', dxp-5, (sy(0)+Ay)/2, C.dim, 10.5,'right');
+    }
+    const ox=dnx*42, oy=dny*42;
+    arrow(Ax+ox,Ay+oy,Bx+ox,By+oy,'rgba(154,167,189,0.75)',1.1,6);
+    arrow(Bx+ox,By+oy,Ax+ox,Ay+oy,'rgba(154,167,189,0.75)',1.1,6);
+    chipLabel('L = '+R.L.toFixed(2)+' m',(Ax+Bx)/2+dnx*60,(Ay+By)/2+dny*60,C.dim,10.5,'center');
+    if(st.theta>2 && st.theta<88){
+      const r=Math.min(34, Lp*0.42);
+      ctx.save(); ctx.strokeStyle=C.vio; ctx.lineWidth=1.3;
+      ctx.beginPath(); ctx.arc(Ax,Ay,r,0,Math.atan2(uy,ux)); ctx.stroke(); ctx.restore();
+      line(Ax,Ay,Ax+r*1.35,Ay,'rgba(167,139,250,0.5)',1,[3,3]);
+      chipLabel('θ = '+st.theta.toFixed(1)+'°', Ax+r*1.08, Ay+r*0.40, C.vio, 10.5, 'left');
+    }
+    chipLabel('b = '+R.b.toFixed(2)+' m into the page', xR-8, yF-15, C.dim, 10.5, 'right');
+  });
+
+  // probe — callout parked in a fixed corner, so it can never collide
+  if(st.probeOn && stepHL==='all'){
+    const f=st.probe, X=Ax+ux*f, Y=Ay+uy*f;
+    const h=R.hTop+f*R.L*R.s, p=R.rho*G*h;
+    line(xL,Y,X,Y,'rgba(52,211,153,0.40)',1,[3,4]);
+    const bx=vp.x+16, by=vp.y+vp.h-20;
+    line(X,Y,bx+96,by-6,'rgba(52,211,153,0.35)',1,[3,4]);
+    dot(X,Y,5.5,C.ok,'#0f1420');
+    txt('probe  h = '+h.toFixed(2)+' m    p = ρgh = '+kPa(p), bx, by, C.ok, 12,'left','alphabetic',true);
+  }
+
+  txt('force on the wetted face of the plate', vp.x+vp.w-10, vp.y+18, C.dim, 11, 'right');
+}
+
+/* ==========================================================================
+   SCENE — curved surface
+   ========================================================================== */
+function drawCurvedScene(vp,R){
+  const padT=48, padB=34, padX=48;
+  const xA = -R.R*R.c, hA = R.hO + R.R*R.s;      // upper end A of the arc
+  const hFloor = R.hO + R.R;                     // invert C sits on the floor
+  const xMax = R.R*0.52 + 0.16;
+  let xMin = xA - Math.max(0.60*R.R, 0.45);
+  const fit = fitWorld(vp,padX,padT,padB, xMax-xMin, hFloor*1.08, 2.2);
+  xMin = xMax - fit.wW;                          // any slack width becomes reservoir
+  const sc = fit.sc;
+  const X0 = vp.x+padX+fit.ox - xMin*sc, Y0 = vp.y+padT+fit.oy;
+  const sx = X => X0 + X*sc, sy = h => Y0 + h*sc;
+  mapCurved = {sc,X0,Y0,sx,sy,xA,hA,hFloor};
+
+  const Ox=sx(0), Oy=sy(R.hO), yS=sy(0), yF=sy(hFloor);
+  const arcPath = (rev) => {
+    ctx.arc(Ox,Oy,R.R*sc, rev?R.phi2-2*Math.PI:R.phi1-2*Math.PI,
+                           rev?R.phi1-2*Math.PI:R.phi2-2*Math.PI, !!rev);
+  };
+  // NB screen y is inverted w.r.t. z, so the arc angles are negated:
+  const arcScreen = (rev)=>{
+    const a1=-R.phi1, a2=-R.phi2;
+    ctx.arc(Ox,Oy,R.R*sc, rev?a2:a1, rev?a1:a2, rev?false:true);
+  };
+
+  // ---- water body ---------------------------------------------------------
+  const xEdgeL = vp.x, xEdgeR = vp.x+vp.w;       // fills run to the viewport edge
+  ctx.save(); ctx.beginPath();
+  if(!st.above){
+    // fluid on the outside of the arc: reservoir to the left, retained by the
+    // wall above A and by the gate itself
+    ctx.moveTo(xEdgeL,yS); ctx.lineTo(sx(xA),yS); ctx.lineTo(sx(xA),sy(hA));
+    arcScreen(false);
+    ctx.lineTo(sx(0),yF); ctx.lineTo(xEdgeL,yF); ctx.closePath();
+  }else{
+    // fluid resting on top of the arc, held between two walls
+    ctx.moveTo(sx(xA),yS); ctx.lineTo(sx(0),yS); ctx.lineTo(sx(0),sy(R.hO+R.R));
+    arcScreen(true);
+    ctx.closePath();
+  }
+  ctx.fillStyle = waterFill(0,yS,0,yF); ctx.fill();
+  ctx.restore();
+
+  // depth grid
+  if(st.dims){
+    const step=niceStep(hFloor,5), d=decOf(step);
+    for(let h=step;h<hFloor-1e-9;h+=step){
+      const y=sy(h);
+      line(xEdgeL,y,xEdgeR,y,'rgba(154,167,189,0.15)',1,[3,5]);
+      txt(h.toFixed(d)+' m', xEdgeL+6, y-3,'rgba(154,167,189,0.7)',10);
+    }
+  }
+
+  // ---- vertical prism above the arc --------------------------------------
+  if(st.volOn) grp('vol',()=>{
+    const prism = ()=>{
+      ctx.moveTo(sx(xA),yS); ctx.lineTo(Ox,yS); ctx.lineTo(Ox,yF);
+      arcScreen(true);
+      ctx.closePath();
+    };
+    hatch(prism, st.above? C.sub : C.crit, 9, st.above?0.30:0.24);
+    ctx.save(); ctx.beginPath(); prism();
+    ctx.setLineDash([5,4]); ctx.strokeStyle= st.above?C.sub:C.crit; ctx.lineWidth=1.3; ctx.stroke();
+    ctx.restore();
+  });
+
+  // ---- structure ----------------------------------------------------------
+  ctx.fillStyle='#28324a';
+  ctx.fillRect(xEdgeL, yF, xEdgeR-xEdgeL, Math.max(9, vp.y+vp.h-yF));    // bed
+  ctx.save(); ctx.beginPath();
+  ctx.rect(xEdgeL, yF+8, xEdgeR-xEdgeL, Math.max(0, vp.y+vp.h-yF-8)); ctx.clip();
+  ctx.strokeStyle='rgba(154,167,189,0.10)'; ctx.lineWidth=1;
+  for(let d=-vp.h; d<vp.w+vp.h; d+=13){
+    ctx.beginPath(); ctx.moveTo(xEdgeL+d, yF+8); ctx.lineTo(xEdgeL+d+vp.h, vp.y+vp.h); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.fillRect(sx(xA)-5, vp.y+8, 10, sy(hA)-vp.y-8);                     // wall above A
+  if(st.above) ctx.fillRect(Ox-5, vp.y+8, 10, sy(hFloor)-vp.y-8);        // right-hand wall
+  if(st.above) freeSurface(sx(xA),Ox,yS,C.water); else freeSurface(xEdgeL,sx(xA),yS,C.water);
+  txt('free surface   p = 0 (gauge)', (st.above?sx(xA):xEdgeL)+6, yS-8, C.ink, 11,'left','alphabetic',true);
+  if(st.volOn) grp('vol',()=>
+    chipLabel((st.above?'real':'imaginary')+' volume above the arc,  V = '+R.V.toFixed(3)+' m³',
+              sx(xA)+16, sy(R.hO*0.5 + R.R*0.25), st.above?C.sub:C.crit, 10.5, 'left'));
+
+  // ---- pressure arrows on the arc (all radial → all pass through O) -------
+  const pMax=Math.max(R.pC,1e-9);
+  const aMax=Math.min(vp.w*0.13, vp.h*0.16, R.R*sc*0.78, 82);
+  if(st.arrows) grp('arrows',()=>{
+    ctx.save();                       // never draw pressure arrows into the bed
+    ctx.beginPath(); ctx.rect(vp.x, vp.y, vp.w, yF-vp.y); ctx.clip();
+    const n=18;
+    for(let i=0;i<=n;i++){
+      const ph=R.phi1+(R.phi2-R.phi1)*i/n;
+      const h=R.hO-R.R*Math.sin(ph); if(h<=0) continue;
+      const p=R.rho*G*h, l=(p/pMax)*aMax;
+      const px=Ox+R.R*sc*Math.cos(ph), py=Oy-R.R*sc*Math.sin(ph);
+      const dirx = st.above? Math.cos(ph): -Math.cos(ph);
+      const diry = st.above? -Math.sin(ph): Math.sin(ph);   // screen y down
+      // tail on the fluid side, head on the surface
+      arrow(px-dirx*l, py-diry*l, px, py, C.pressure,1.7,7);
+    }
+    ctx.restore();
+  });
+
+  // ---- the gate -----------------------------------------------------------
+  grp('gate',()=>{
+    ctx.save(); ctx.beginPath(); arcScreen(false);
+    ctx.strokeStyle='#1d1d1b'; ctx.lineWidth=9.5; ctx.lineCap='butt'; ctx.stroke();
+    ctx.strokeStyle='#ffffff'; ctx.lineWidth=6.5; ctx.stroke(); ctx.restore();
+    line(Ox,Oy,sx(xA),sy(hA),'rgba(223,231,245,0.35)',2,[6,4]);
+    line(Ox,Oy,sx(0),sy(R.hO+R.R),'rgba(223,231,245,0.35)',2,[6,4]);
+    dot(Ox,Oy,5.5,'#0f1420','#dfe7f5');
+    chipLabel('A', sx(xA)+15, sy(hA)-13, C.dim,10.5,'left');
+    chipLabel('C', sx(0)+16, sy(R.hO+R.R)-13, C.dim,10.5,'left');
+    if(st.dims) chipLabel('b = '+R.b.toFixed(2)+' m into the page', sx(xMax)-4, yF-16, C.dim,10.5,'right');
+  });
+
+  /* The two components act on their own lines of action.  Those lines meet at
+     P*, and the resultant of two forces passes through their intersection —
+     so drawing F_R from P* shows, geometrically, that it goes through O.      */
+  const sgn = st.above? -1 : 1;                     // +x when the fluid is outside
+  const yFx = sy(R.hRx), xFv = sx(-R.xbar);         // the two lines of action
+  const Px = xFv, Py = yFx;                         // their intersection P*
+
+  grp('proj',()=>{
+    line(Ox, sy(R.hTopP), Ox, sy(R.hO+R.R), C.vio, 2, [5,4]);
+    chipLabel('vertical projection',Ox+15, Oy+38, C.vio, 10,  'left');
+    if(st.dims) chipLabel('R = '+R.R.toFixed(2)+' m', Ox+15, Oy+60, C.dim, 10.5,'left');
+  });
+  grp('gate',()=> chipLabel('O  pivot', Ox+15, Oy+15, C.ink, 10.5,'left'));
+
+  const fxl = Math.min(vp.w*0.15, 88), fvl = Math.min(vp.h*0.17, 88);
+  grp('fx',()=>{
+    line(xEdgeL, yFx, Ox, yFx, 'rgba(167,139,250,0.30)',1,[4,4]);
+    arrow(Px-sgn*fxl, Py, Px, Py, C.vio, 3.2, 11);
+    chipLabel('F_x = '+fmtF(R.Fx)+',  '+R.armX.toFixed(3)+' m below O',
+              Px-sgn*fxl-sgn*8, Py, C.vio, 11, sgn>0?'right':'left');
+  });
+  grp('fv',()=>{
+    line(xFv, sy(0), xFv, sy(hFloor), 'rgba(59,130,246,0.30)',1,[4,4]);
+    if(st.above) arrow(Px, Py-fvl, Px, Py, C.sub, 3.2, 11);
+    else         arrow(Px, Py+fvl, Px, Py, C.sub, 3.2, 11);
+    chipLabel('F_v = '+fmtF(R.Fv)+(st.above?' ↓':' ↑'),
+              Px, st.above? Py-fvl-13 : Py+fvl+13, C.sub, 11,'center');
+    chipLabel('line of action of F_v :  '+R.xbar.toFixed(3)+' m from O',
+              Px, sy(0)+18, C.sub, 10,'center');
+  });
+
+  // the resultant, drawn from P* straight through the pivot
+  const ax = sgn*R.Fx, az = st.above? -R.Fv : R.Fv;
+  const mag = Math.hypot(ax,az)||1;
+  const ex = ax/mag, ey = -az/mag;                   // screen direction
+  // O sits somewhere on this line; span the arrow across both so it is visibly
+  // the same straight line whichever way the components point
+  const tO = (Ox-Px)*ex + (Oy-Py)*ey;
+  const s0 = Math.min(0,tO) - 46, s1 = Math.max(0,tO) + Math.min(vp.w*0.14, 84);
+  DRAWN.curved = {x0:Px+ex*s0, y0:Py+ey*s0, x1:Px+ex*s1, y1:Py+ey*s1,
+                  ox:Ox, oy:Oy, pxPerM:sc, R:R.R};
+  grp('fr',()=>{
+    dot(Px,Py,4.5,C.crit,'#0f1420');
+    arrow(Px+ex*s0, Py+ey*s0, Px+ex*s1, Py+ey*s1, C.crit, 3.6, 13);
+    chipLabel('F_R = '+fmtF(R.FR)+'   at '+R.alpha.toFixed(1)+'° to the horizontal',
+              Px+ex*s1, Py+ey*s1-15, C.crit, 11.5,'center');
+    chipLabel('every pressure arrow is radial → F_R passes through O',
+              vp.x+vp.w/2, vp.y+16, C.ok, 11,'center');
+  });
+
+  // ---- probe --------------------------------------------------------------
+  if(st.probeOn && stepHL==='all'){
+    const ph=R.phi1+(R.phi2-R.phi1)*st.probe;
+    const h=R.hO-R.R*Math.sin(ph), p=R.rho*G*Math.max(h,0);
+    const px=Ox+R.R*sc*Math.cos(ph), py=Oy-R.R*sc*Math.sin(ph);
+    line(px,py,Ox,Oy,'rgba(52,211,153,0.55)',1.2,[3,4]);
+    dot(px,py,5.5,C.ok,'#0f1420');
+    const bx=vp.x+16, by=vp.y+vp.h-16;
+    line(px,py,bx+96,by-6,'rgba(52,211,153,0.30)',1,[3,4]);
+    txt('probe  h = '+h.toFixed(2)+' m    p = ρgh = '+kPa(p)+'   (normal to the arc → through O)',
+        bx, by, C.ok, 12,'left','alphabetic',true);
+    mapCurved.probeXY=[px,py];
+  }
+}
+
+/* ==========================================================================
+   DIAGRAM — pressure prism (plane) / projection + force triangle (curved)
+   ========================================================================== */
+function drawPrism(vp,R){
+  const padL=58, padR=26, padT=46, padB=52;
+  const x0=vp.x+padL, x1=vp.x+vp.w-padR, y0=vp.y+padT, y1=vp.y+vp.h-padB;
+  const pMax=Math.max(R.pBot,1e-9)*1.06;
+  const px = p => x0 + (p/pMax)*(x1-x0);
+  const py = s => y0 + (s/R.L)*(y1-y0);
+
+  txt('Pressure prism on the plate', vp.x+padL-10, vp.y+22, C.ink, 12.5,'left','alphabetic',true);
+  txt('area × b = F_R ;  its centroid = the centre of pressure',
+      vp.x+padL-10, vp.y+37, C.dim, 10.5);
+
+  // axes
+  line(x0,y0,x0,y1,C.line,1.5); line(x0,y1,x1,y1,C.line,1.5);
+  txt('p  (kPa)', (x0+x1)/2, y1+34, C.dim, 11,'center');
+  ctx.save(); ctx.translate(vp.x+16,(y0+y1)/2); ctx.rotate(-Math.PI/2);
+  txt('distance along the plate  s  (m)',0,0,C.dim,11,'center'); ctx.restore();
+
+  const stp=niceStep(pMax/1000,4);
+  for(let q=0;q<=pMax/1000+1e-9;q+=stp){
+    const X=px(q*1000); if(X>x1+1) break;
+    line(X,y0,X,y1,'rgba(154,167,189,0.13)',1);
+    txt(q.toFixed(stp<1?1:0), X, y1+15, C.dim,10,'center');
+  }
+  const stpS=niceStep(R.L,4);
+  for(let s=0;s<=R.L+1e-9;s+=stpS){
+    const Y=py(s); line(x0-4,Y,x1,Y,'rgba(154,167,189,0.10)',1);
+    txt(s.toFixed(stpS<1?2:1), x0-8, Y+3.5, C.dim,10,'right');
+  }
+
+  // the prism
+  grp('prism',()=>{
+    ctx.beginPath();
+    ctx.moveTo(px(0),py(0)); ctx.lineTo(px(R.pTop),py(0));
+    ctx.lineTo(px(R.pBot),py(R.L)); ctx.lineTo(px(0),py(R.L)); ctx.closePath();
+    const g=ctx.createLinearGradient(x0,0,x1,0);
+  g.addColorStop(0,'rgba(0,90,133,0.08)'); g.addColorStop(1,'rgba(0,90,133,0.26)');
+    ctx.fillStyle=g; ctx.fill();
+  ctx.strokeStyle=C.pressure; ctx.lineWidth=1.8; ctx.stroke();
+  chipLabel('p_top = '+kPa(R.pTop), Math.min(px(R.pTop)+8, x1-4), py(0)+13, C.pressure,10,'right');
+  chipLabel('p_bot = '+kPa(R.pBot), Math.min(px(R.pBot)+8, x1-4), py(R.L)-13, C.pressure,10,'right');
+  });
+
+  // plate centroid vs centre of pressure
+  grp('centroid',()=>{
+    line(x0,py(R.L/2),px(R.pTop+(R.pBot-R.pTop)*0.5)+16,py(R.L/2),C.dim,1.2,[4,4]);
+    chipLabel('plate centroid  s = L/2', x0+10, py(R.L/2)-11, C.dim,10,'left');
+  });
+  const yR=py(R.sR);
+  grp('force',()=>{
+    line(x0,yR,x1,yR,C.crit,1.8);
+    chipLabel('CP  s_R = L/2 + Δy = '+R.sR.toFixed(3)+' m', x1-6, yR+13, C.crit,10.5,'right');
+  });
+
+  // probe on the p(s) line
+  if(st.probeOn && stepHL==='all'){
+    const f=st.probe, p=R.pTop+(R.pBot-R.pTop)*f;
+    const X=px(p), Y=py(f*R.L);
+    line(x0,Y,X,Y,'rgba(52,211,153,0.5)',1,[3,4]);
+    dot(X,Y,5,C.ok,'#0f1420');
+    return {tieX:x0, tieY:yR, probeXY:[X,Y]};
+  }
+  return {tieX:x0, tieY:yR};
+}
+
+function drawCurvedDiagram(vp,R){
+  const h1=vp.h*0.50;
+  const A={x:vp.x,y:vp.y,w:vp.w,h:h1}, B={x:vp.x,y:vp.y+h1,w:vp.w,h:vp.h-h1};
+
+  /* --- upper: pressure prism on the vertical projection ------------------- */
+  const padL=58,padR=26,padT=42,padB=34;
+  const x0=A.x+padL, x1=A.x+A.w-padR, y0=A.y+padT, y1=A.y+A.h-padB;
+  const pMax=Math.max(R.pC,1e-9)*1.06;
+  const px=p=>x0+(p/pMax)*(x1-x0);
+  const hT=R.hTopP, hB=R.hO+R.R;
+  const py=h=>y0+((h-hT)/Math.max(hB-hT,1e-9))*(y1-y0);
+  const yRx=py(R.hRx);                      // needed by the tie-line after the group
+
+  grp('fx',()=>{
+  txt('Step 1 — horizontal component', A.x+padL-10, A.y+20, C.vio, 12.5,'left','alphabetic',true);
+  txt('the vertical projection is an ordinary plane surface',A.x+padL-10,A.y+34,C.dim,10.5);
+  line(x0,y0,x0,y1,C.line,1.5); line(x0,y1,x1,y1,C.line,1.5);
+  ctx.beginPath();
+  ctx.moveTo(px(0),py(hT)); ctx.lineTo(px(R.pA),py(hT));
+  ctx.lineTo(px(R.pC),py(hB)); ctx.lineTo(px(0),py(hB)); ctx.closePath();
+  const g=ctx.createLinearGradient(x0,0,x1,0);
+  g.addColorStop(0,'rgba(167,139,250,0.10)'); g.addColorStop(1,'rgba(167,139,250,0.34)');
+  ctx.fillStyle=g; ctx.fill(); ctx.strokeStyle=C.vio; ctx.lineWidth=1.7; ctx.stroke();
+  line(x0,yRx,x1,yRx,C.crit,1.7);
+  chipLabel('F_x = γ h_c A_proj = '+fmtF(R.Fx), x1-6, y0+10, C.vio,10.5,'right');
+  chipLabel('line of action '+R.armX.toFixed(3)+' m below O', x1-6, yRx+13, C.crit,10,'right');
+  txt('depth '+hT.toFixed(2)+' m', x0-8, py(hT)+3.5, C.dim,10,'right');
+  txt('depth '+hB.toFixed(2)+' m', x0-8, py(hB)+3.5, C.dim,10,'right');
+  });
+
+  /* --- lower: force triangle and the moment balance about O --------------- */
+  const bx0=B.x+64, by0=B.y+50, bw=B.w-100, bh=B.h-140;
+  grp('fr',()=>{
+  txt('Step 2 — combine, and take moments about O', B.x+48, B.y+24, C.crit,12.5,'left','alphabetic',true);
+  txt('F_R = √(F_x² + F_v²)   ·   tan α = F_v / F_x', B.x+48, B.y+38, C.dim,10.5);
+
+  const sF = Math.min(bw/Math.max(R.Fx,1e-9), (bh*0.62)/Math.max(R.Fv,1e-9))*0.86;
+  const ox=bx0, oy=by0+bh*0.62;
+  arrow(ox,oy, ox+R.Fx*sF, oy, C.vio, 3, 11);
+  arrow(ox+R.Fx*sF, oy, ox+R.Fx*sF, oy-R.Fv*sF, C.sub, 3, 11);
+  arrow(ox,oy, ox+R.Fx*sF, oy-R.Fv*sF, C.crit, 3.4, 13);
+  chipLabel('F_x '+fmtF(R.Fx), ox+R.Fx*sF*0.5, oy+15, C.vio,10,'center');
+  chipLabel('F_v '+fmtF(R.Fv), ox+R.Fx*sF+8, oy-R.Fv*sF*0.5, C.sub,10,'left');
+  chipLabel('F_R '+fmtF(R.FR), ox+R.Fx*sF*0.42, oy-R.Fv*sF*0.62, C.crit,10.5,'center');
+  ctx.save(); ctx.strokeStyle=C.crit; ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.arc(ox,oy,26,-Math.atan2(R.Fv*sF,R.Fx*sF),0); ctx.stroke(); ctx.restore();
+  chipLabel('α = '+R.alpha.toFixed(1)+'°', ox+34, oy-13, C.crit,10,'left');
+
+  // moment cancellation bars
+  const mMax=Math.max(Math.abs(R.Mfx),Math.abs(R.Mfv),1e-9);
+  const mx0=B.x+B.w*0.5, my=B.y+B.h-42, mw=B.w*0.40;
+  txt('moments about O', mx0, my-30, C.dim,10.5,'center');
+  const w1=(R.Mfx/mMax)*mw*0.5, w2=(R.Mfv/mMax)*mw*0.5;
+  ctx.fillStyle=C.vio; ctx.fillRect(mx0, my-16, w1, 9);
+  ctx.fillStyle=C.sub; ctx.fillRect(mx0-w2, my-3, w2, 9);
+  txt('F_x·'+R.armX.toFixed(2)+' = '+fmtM(R.Mfx), mx0+w1+6, my-8.5, C.vio,10,'left','middle');
+  txt(fmtM(R.Mfv)+' = F_v·'+R.xbar.toFixed(2), mx0-w2-6, my+4.5, C.sub,10,'right','middle');
+  line(mx0,my-24,mx0,my+12,C.line,1.5);
+  chipLabel('net moment about O = '+fmtM(R.Mnet)+'  ✓', mx0, my+26, C.ok,11,'center');
+  });
+
+  return {tieX:x0, tieY:yRx};
+}
+
+/* ==========================================================================
+   FRAME LOOP
+   ========================================================================== */
+let simT=0, lastT=performance.now();
+function frame(now){
+  const dtWall=Math.min(0.05,(now-lastT)/1000); lastT=now;
+  const dt = st.paused ? 0 : dtWall;
+  simT += dt;
+
+  // probe auto-sweep (frozen while dragging or paused)
+  if(!st.drag && st.probeOn) st.probe = 0.5 - 0.48*Math.cos(simT*0.55);
+
+  // submergence sweep
+  if(st.sweep && dt>0){
+    const u = 0.5 - 0.5*Math.cos(simT*0.30);
+    if(st.mode==='curved'){
+      st.hO = 0.15 + u*6.0;  syncInput('s-hO',st.hO);
+    }else{
+      const hmax = Math.min(12, 0.15 + 7.5);
+      st.hTop = 0.05 + u*hmax; syncInput('s-ht',st.hTop);
+    }
+    refreshChips();
+  }
+
+  const R=solve();
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=C.pan; ctx.fillRect(0,0,W,H);
+  // divider
+  if(VP.diag.x>0) line(VP.diag.x,10,VP.diag.x,H-10,C.line,1);
+  else            line(10,VP.diag.y,W-10,VP.diag.y,C.line,1);
+
+  let tie=null;
+  if(st.mode==='curved'){ drawCurvedScene(VP.scene,R); tie=drawCurvedDiagram(VP.diag,R); }
+  else                  { drawPlaneScene(VP.scene,R);  tie=drawPrism(VP.diag,R); }
+
+  // tie-line: the SAME point in the scene and in the diagram
+  if(tie){
+    const src = (st.mode==='curved') ? null : mapPlane;
+    if(src){
+      const R2=R;
+      const xa=-R2.L*R2.c/2, Ax=src.sx(xa), Ay=src.sy(R2.hTop);
+      const Bx=src.sx(R2.L*R2.c/2), By=src.sy(R2.hBot);
+      const rx=Ax+(Bx-Ax)*(R2.sR/R2.L), ry=Ay+(By-Ay)*(R2.sR/R2.L);
+      line(rx,ry,tie.tieX,tie.tieY,'rgba(245,158,11,0.30)',1.2,[5,5]);
+    }
+  }
+  updateReadout(R);
+  renderSteps(R);
+  requestAnimationFrame(frame);
+}
+
+/* ==========================================================================
+   READOUT
+   ========================================================================== */
+/* ==========================================================================
+   WORKED SOLUTION — the same numbers, written the way a student must write them
+   ========================================================================== */
+function stepsPlane(R){
+  const th=st.theta.toFixed(1), g=(R.rho*G/1000).toFixed(2), ycl=R.L/2;
+  return [
+   {t:'Area and centroid of the plate',
+    why:'Start from the shape alone. For a rectangle both come straight off the table of '
+       +'geometric properties, and neither depends on the water.',
+    eqs:[['A = b · L', R.b.toFixed(2)+' × '+R.L.toFixed(2)+' = <b>'+R.A.toFixed(4)+' m²</b>'],
+         ['ȳ = L / 2  (from the upper edge, measured <i>along the plane</i>)',
+          '= <b>'+ycl.toFixed(4)+' m</b>']],
+    hl:'plate'},
+
+   {t:'Depth of the centroid',
+    why:'Only the vertical drop counts, so multiply the distance along the plane by sin θ. '
+       +'This is the single most common slip in the topic: ȳ is along the plane, h_c is vertical.',
+    eqs:[['h_c = h_top + ȳ sin θ',
+          '= '+R.hTop.toFixed(3)+' + '+ycl.toFixed(3)+' × sin '+th+'° = <b>'+R.hc.toFixed(4)+' m</b>']],
+    hl:'hc'},
+
+   {t:'Pressure at the centroid',
+    why:'Gauge pressure grows linearly with depth, so the pressure at the centroid is the '
+       +'<i>average</i> over the whole plate. That is what makes the next step legal.',
+    eqs:[['p_c = ρ g h_c',
+          '= '+st.rho.toFixed(0)+' × 9.81 × '+R.hc.toFixed(3)+' = <b>'+kPa(R.pC)+'</b>']],
+    hl:'prism'},
+
+   {t:'Resultant force',
+    why:'Average pressure × area. On the right-hand diagram it is the <i>area of the pressure '
+       +'prism</i> multiplied by the width b — the two are the same statement.',
+    eqs:[['F_R = p_c A = ρ g h_c A = γ h_c A,   γ = '+g+' kN/m³',
+          '= '+kPa(R.pC)+' × '+R.A.toFixed(4)+' m² = <b>'+fmtF(R.F)+'</b>'],
+         ['direction: perpendicular to the plate, pushing onto it','']],
+    res:'F_R = '+fmtF(R.F), hl:'force'},
+
+   {t:'Second moment of area',
+    why:'The pressure is <i>not</i> uniform, so the resultant does not act at the centroid. '
+       +'How far it shifts depends on how the area is spread about the centroidal axis.',
+    eqs:[['I_xc = b L³ / 12  (about the horizontal centroidal axis)',
+          R.b.toFixed(2)+' × '+R.L.toFixed(2)+'³ / 12 = <b>'+R.Ixc.toFixed(5)+' m⁴</b>']],
+    hl:'plate'},
+
+   {t:'Slope distance to the centroid',
+    why:'The centre-of-pressure formula is written in y — distance along the plane from where '
+       +'the plane would cut the free surface. Convert h_c onto that axis first.',
+    eqs:[['y_c = h_c / sin θ',
+          '= '+R.hc.toFixed(4)+' / sin '+th+'° = <b>'
+            +(isFinite(R.yc)? R.yc.toFixed(4)+' m' : '∞   (θ = 0)')+'</b>']],
+    hl:'yc'},
+
+   {t:'Shift below the centroid',
+    why:'Take moments of the pressure distribution about the free-surface line. Deeper strips '
+       +'push harder, so the resultant slides <i>down</i> the plane by Δy. It shrinks as the '
+       +'plate is submerged deeper, and vanishes at θ = 0.',
+    eqs:[['Δy = I_xc / (y_c A)',
+          isFinite(R.yc)
+            ? '= '+R.Ixc.toFixed(5)+' / ('+R.yc.toFixed(4)+' × '+R.A.toFixed(4)+') = <b>'
+              +R.dy.toFixed(4)+' m</b>'
+            : '→ 0   (uniform pressure on a horizontal plate) = <b>0.0000 m</b>']],
+    hl:'dy'},
+
+   {t:'Centre of pressure',
+    why:'Add the shift to the centroid. Quote it both ways — along the plane and as a depth — '
+       +'because problems ask for either. On the diagram it is the centroid of the prism.',
+    eqs:[['y_R = y_c + Δy', isFinite(R.yR)? '= <b>'+R.yR.toFixed(4)+' m</b> along the plane':'—'],
+         ['from the upper edge: s_R = ȳ + Δy',
+          '= '+ycl.toFixed(4)+' + '+R.dy.toFixed(4)+' = <b>'+R.sR.toFixed(4)+' m</b>'],
+         ['depth: h_R = h_top + s_R sin θ',
+          '= <b>'+R.hR.toFixed(4)+' m</b> below the free surface']],
+    res:'CP at '+R.sR.toFixed(3)+' m from the upper edge', hl:'cp'},
+
+   {t:'Moment on a hinge',
+    why:'Gate problems end here: the hydrostatic moment about a hinge is F_R times its distance '
+       +'from the hinge. Add the gate\'s own weight separately if the question gives one.',
+    eqs:[['M about the upper edge A = F_R × s_R',
+          '= '+fmtF(R.F)+' × '+R.sR.toFixed(3)+' m = <b>'+fmtM(R.Mtop)+'</b>'],
+         ['M about the lower edge B = F_R × (L − s_R)','= <b>'+fmtM(R.Mbot)+'</b>']],
+    hl:'force'}
+  ];
+}
+
+function stepsCurved(R){
+  const g=(R.rho*G/1000).toFixed(2);
+  return [
+   {t:'Why a curved surface is different',
+    why:'On a curved surface the pressure changes <i>direction</i> from point to point, so the '
+       +'forces cannot be added as numbers. Split them into a horizontal and a vertical '
+       +'component, use a rule you already know on each, then recombine.',
+    eqs:[['F_R = √(F_x² + F_v²)','']], hl:'gate'},
+
+   {t:'Horizontal component — use the vertical projection',
+    why:'Only the vertical projection of the surface can carry horizontal thrust, and that '
+       +'projection is an ordinary flat plate. This is the upper diagram on the right.',
+    eqs:[['A_proj = projected height × b',
+          '= '+R.Hp.toFixed(3)+' × '+R.b.toFixed(2)+' = <b>'+R.Ap.toFixed(4)+' m²</b>'],
+         ['h_c = depth of the centroid of that projection','= <b>'+R.hcP.toFixed(4)+' m</b>'],
+         ['F_x = γ h_c A_proj,   γ = '+g+' kN/m³','= <b>'+fmtF(R.Fx)+'</b>']],
+    res:'F_x = '+fmtF(R.Fx), hl:'fx'},
+
+   {t:'Where F_x acts',
+    why:'The same centre-of-pressure rule as for any plane surface. The projection is vertical, '
+       +'so y and h are the same axis and Δ is measured straight down.',
+    eqs:[['Δ = (projected height)² / (12 h_c)',
+          '= '+R.Hp.toFixed(3)+'² / (12 × '+R.hcP.toFixed(3)+') = <b>'+R.dyx.toFixed(4)+' m</b>'],
+         ['depth of the line of action = h_c + Δ',
+          '= '+R.hRx.toFixed(4)+' m, i.e. <b>'+R.armX.toFixed(4)+' m below O</b>']],
+    hl:'fx'},
+
+   {t:'Vertical component — weigh the prism of fluid',
+    why:'Take the column standing vertically between the surface and the free-surface level — '
+       +'the hatched region in the scene. Its weight is the vertical force. Here the fluid is '
+       +'on the far side, so the column is <i>imaginary</i> and the force points up; the '
+       +'magnitude is the same either way.',
+    eqs:[['V = volume of that prism','= <b>'+R.V.toFixed(4)+' m³</b>'],
+         ['F_v = γ V','= '+g+' × '+R.V.toFixed(4)+' = <b>'+fmtF(R.Fv)+'</b>'
+          +(st.above?' downward':' upward')]],
+    res:'F_v = '+fmtF(R.Fv), hl:'fv'},
+
+   {t:'Where F_v acts',
+    why:'Through the centroid of that prism, measured horizontally from O.',
+    eqs:[['x̄ = centroid of the prism','= <b>'+R.xbar.toFixed(4)+' m from O</b>']],
+    hl:'fv'},
+
+   {t:'Recombine',
+    why:'Vector sum of the two components — the force triangle in the lower diagram.',
+    eqs:[['F_R = √(F_x² + F_v²)',
+          '= √('+(R.Fx/1000).toFixed(2)+'² + '+(R.Fv/1000).toFixed(2)+'²) = <b>'+fmtF(R.FR)+'</b>'],
+         ['α = tan⁻¹(F_v / F_x)','= <b>'+R.alpha.toFixed(2)+'°</b> to the horizontal']],
+    res:'F_R = '+fmtF(R.FR)+' at '+R.alpha.toFixed(1)+'°', hl:'fr'},
+
+   {t:'Take moments about O',
+    why:'On a circular arc every pressure arrow points at the centre of curvature, so the whole '
+       +'pressure field has no moment about it. The two component moments are large and they '
+       +'cancel exactly — at any setting of the sliders.',
+    eqs:[['M from F_x = F_x × '+R.armX.toFixed(3)+' m','= '+fmtM(R.Mfx)+'  (one way)'],
+         ['M from F_v = F_v × '+R.xbar.toFixed(3)+' m','= '+fmtM(R.Mfv)+'  (the other way)'],
+         ['net moment about O','= <b>'+fmtM(R.Mnet)+'</b>']],
+    res:'the resultant passes through O', hl:'fr'}
+  ];
+}
+
+let stepCount=0, lastWork=0;
+function equationNode(source, className){
+  return '<div class="'+className+'" data-tex-legacy="'+encodeURIComponent(source)+'"></div>';
+}
+function renderSteps(R, force){
+  if(st.tab!=='work') return;
+  const now=performance.now();
+  if(!force && now-lastWork < 120) return;          // throttle during a sweep
+  lastWork=now;
+  const steps=(st.mode==='curved')?stepsCurved(R):stepsPlane(R);
+  stepCount=steps.length;
+  const cur=clamp(st.step,0,stepCount);             // 0 = show all
+  let html='';
+  steps.forEach((s,i)=>{
+    const k=i+1, cls = cur===0 ? 'on' : (k===cur?'on':(k<cur?'done':''));
+    html+='<div class="step '+cls+'" data-k="'+k+'">'
+       +  '<div class="stepHead"><span class="num">'+k+'</span>'+s.t+'</div>'
+       +  '<div class="why">'+s.why+'</div>';
+    s.eqs.forEach(([a,b])=>{ html+=equationNode(a,'eq');
+                             if(b) html+=equationNode(b,'eq sub'); });
+    if(s.res) html+=equationNode(s.res,'eq res');
+    html+='</div>';
+  });
+  html+='<div class="answer">'+(st.mode==='curved'
+    ? '<b>Answer.</b> F_x = '+fmtF(R.Fx)+' acting '+R.armX.toFixed(3)+' m below O; F_v = '
+     +fmtF(R.Fv)+' acting '+R.xbar.toFixed(3)+' m from it; resultant '+fmtF(R.FR)+' at '
+     +R.alpha.toFixed(1)+'° to the horizontal, passing through O.'
+    : '<b>Answer.</b> F_R = '+fmtF(R.F)+', perpendicular to the plate, acting '+R.sR.toFixed(3)
+     +' m from the upper edge along the plane — a depth of '+R.hR.toFixed(3)+' m.')+'</div>';
+  document.getElementById('steps').innerHTML=html;
+  if(window.STREEM_MATH) window.STREEM_MATH.renderAll(document.getElementById('steps'));
+  document.getElementById('stepPos').textContent =
+    cur===0 ? ('all '+stepCount+' steps') : ('step '+cur+' of '+stepCount);
+  stepHL = (cur===0) ? 'all' : steps[cur-1].hl;
+  document.getElementById('w-prev').disabled = (cur===1);
+  document.getElementById('w-next').disabled = (cur>=stepCount);
+}
+
+const ro=document.getElementById('readout');
+let roMode=null;
+const row=(a,id)=>'<tr><td>'+a+'</td><td id="'+id+'"></td></tr>';
+const put=(id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+const READOUT_TEX = {
+  curved: String.raw`\begin{aligned}
+    F_x&=\gamma h_cA_{\mathrm{proj}}\\
+    F_v&=\gamma V\\
+    F_R&=\sqrt{F_x^2+F_v^2},\qquad \tan\alpha=\frac{F_v}{F_x}
+  \end{aligned}`,
+  plane: String.raw`\begin{aligned}
+    F_R&=\gamma h_cA,\qquad \gamma=\rho g\\
+    y_R&=y_c+\frac{I_{xc}}{y_cA},\qquad I_{xc}=\frac{bL^3}{12}\\
+    \Delta y&=\frac{L^2\sin\theta}{12h_c}
+  \end{aligned}`
+};
+function prepareReadoutMath(mode){
+  ro.querySelectorAll('table.vals td:first-child').forEach(el=>{
+    if(el.textContent.includes('=') || el.textContent.includes('∫')){
+      el.dataset.texLegacy=encodeURIComponent(el.innerHTML);
+    }
+  });
+  const formula=ro.querySelector('.formula');
+  if(formula){ formula.dataset.tex=READOUT_TEX[mode]; formula.dataset.texDisplay='block'; }
+  if(window.STREEM_MATH) window.STREEM_MATH.renderAll(ro);
+}
+function putChk(id,v){
+  const e=document.getElementById(id); if(!e) return;
+  const ok=Math.abs(v-1)<2e-3;
+  e.textContent=v.toFixed(6)+(ok?' ✓':' !'); e.className=ok?'ok':'warn';
+}
+
+const RO_CURVED =
+  '<h2 style="margin-top:0">Horizontal component F<sub>x</sub></h2><table class="vals">'+
+  row('projected height','o-Hp')+
+  row('projected area A<sub>proj</sub>','o-Aproj')+
+  row('centroid depth h<sub>c</sub>','o-hcP')+
+  row('<b>F<sub>x</sub> = ρ g h<sub>c</sub> A<sub>proj</sub></b>','o-Fx')+
+  row('Δ(depth) = I<sub>xc</sub>/(y<sub>c</sub>A)','o-dyx')+
+  row('line of action, below O','o-armX')+
+  '</table><h2>Vertical component F<sub>v</sub></h2><table class="vals">'+
+  row('prism volume V','o-V')+
+  row('<b>F<sub>v</sub> = ρ g V</b>','o-Fv')+
+  row('line of action x̄, from O','o-xbar')+
+  '</table><h2>Resultant</h2><table class="vals">'+
+  row('F<sub>R</sub> = √(F<sub>x</sub>² + F<sub>v</sub>²)','o-FR')+
+  row('α = tan⁻¹(F<sub>v</sub>/F<sub>x</sub>)','o-alpha')+
+  row('moment of F<sub>x</sub> about O','o-Mfx')+
+  row('moment of F<sub>v</sub> about O','o-Mfv')+
+  row('<b>net moment about O</b>','o-Mnet')+
+  '</table><div class="formula">'+
+  'F<sub>x</sub> = γ h<sub>c</sub> A<sub>proj</sub> &nbsp;— the force on the <i>vertical projection</i><br>'+
+  'F<sub>v</sub> = γ V &nbsp;— the weight of the fluid prism between the surface and the free-surface level<br>'+
+  'F<sub>R</sub> = √(F<sub>x</sub>² + F<sub>v</sub>²), &nbsp; tan α = F<sub>v</sub>/F<sub>x</sub></div>'+
+  '<h2>Self-checks (independent quadrature)</h2><table class="vals">'+
+  row('∮p·n<sub>x</sub> dA ÷ γh<sub>c</sub>A<sub>proj</sub>','o-chkFx')+
+  row('∮p·n<sub>z</sub> dA ÷ γV','o-chkFv')+
+  row('|net moment| ÷ (F<sub>R</sub>·R)','o-chkM')+
+  '</table><div class="note">The two force components are computed twice — once from the'+
+  ' formulas above and once by integrating p over 4000 arc elements — and agree to six'+
+  ' figures. The pressure on a circular arc is everywhere <b>radial</b>, so it has no moment'+
+  ' about O: the two large opposing moments cancel <i>exactly</i>, at every slider setting.'+
+  ' That is why a radial (Tainter) gate can be raised against any head by a hoist that only'+
+  ' has to lift the gate\'s own weight.</div>';
+
+const RO_PLANE =
+  '<h2 style="margin-top:0">Geometry</h2><table class="vals">'+
+  row('depth of upper edge h<sub>top</sub>','o-htop')+
+  row('depth of lower edge h<sub>bot</sub>','o-hbot')+
+  row('centroid depth h<sub>c</sub>','o-hc')+
+  row('area A = L·b','o-A')+
+  row('I<sub>xc</sub> = b L³/12','o-Ixc')+
+  '</table><h2>Resultant force</h2><table class="vals">'+
+  row('p at the upper edge','o-ptop')+
+  row('p at the centroid','o-pc')+
+  row('p at the lower edge','o-pbot')+
+  row('<b>F<sub>R</sub> = ρ g h<sub>c</sub> A</b>','o-F')+
+  '</table><h2>Centre of pressure</h2><table class="vals">'+
+  row('y<sub>c</sub> = h<sub>c</sub> / sinθ','o-yc')+
+  row('Δy = I<sub>xc</sub> /(y<sub>c</sub>A)','o-dy')+
+  row('y<sub>R</sub> = y<sub>c</sub> + Δy','o-yR')+
+  row('s<sub>R</sub> = L/2 + Δy  (from edge A)','o-sR')+
+  row('depth of the CP','o-hR')+
+  '</table><h2>Moment on a hinge at the edge</h2><table class="vals">'+
+  row('about the upper edge A','o-Mtop')+
+  row('about the lower edge B','o-Mbot')+
+  '</table><div class="formula">'+
+  'F<sub>R</sub> = γ h<sub>c</sub> A, &nbsp; γ = ρg = <span id="o-gamma"></span><br>'+
+  'y<sub>R</sub> = y<sub>c</sub> + I<sub>xc</sub>/(y<sub>c</sub>A), &nbsp; I<sub>xc</sub> = bL³/12<br>'+
+  'Δy = L² sinθ /(12 h<sub>c</sub>) &nbsp;— the same thing, written so θ → 0 stays finite</div>'+
+  '<h2>Self-checks (independent quadrature)</h2><table class="vals">'+
+  row('∮p dA ÷ ρg h<sub>c</sub>A','o-chkF')+
+  row('∮s·p dA / ∮p dA ÷ s<sub>R</sub>','o-chkS')+
+  '</table><div class="note">Both the force and the centre of pressure are computed twice —'+
+  ' once from the formulas above and once by summing p·dA over 4000 strips of the plate —'+
+  ' and agree to six figures at every slider setting.</div>';
+
+function updateReadout(R){
+  if(st.tab!=='read') return;
+  if(roMode!==st.mode){
+    ro.innerHTML = (st.mode==='curved')?RO_CURVED:RO_PLANE;
+    roMode=st.mode;
+    prepareReadoutMath(st.mode);
+  }
+  if(st.mode==='curved'){
+    put('o-Hp',   m2(R.Hp));
+    put('o-Aproj',R.Ap.toFixed(3)+' m²');
+    put('o-hcP',  m2(R.hcP));
+    put('o-Fx',   fmtF(R.Fx));
+    put('o-dyx',  m2(R.dyx));
+    put('o-armX', m2(R.armX));
+    put('o-V',    R.V.toFixed(4)+' m³');
+    put('o-Fv',   fmtF(R.Fv)+(st.above?' ↓':' ↑'));
+    put('o-xbar', m2(R.xbar));
+    put('o-FR',   fmtF(R.FR));
+    put('o-alpha',R.alpha.toFixed(2)+'°');
+    put('o-Mfx',  fmtM(R.Mfx));
+    put('o-Mfv',  fmtM(R.Mfv));
+    put('o-Mnet', fmtM(R.Mnet));
+    putChk('o-chkFx',R.fxChk); putChk('o-chkFv',R.fvChk);
+    const e=document.getElementById('o-chkM');
+    if(e){ e.textContent=(Math.abs(R.Mnet)/(R.FR*R.R+1e-9)).toExponential(1)+' ✓'; e.className='ok'; }
+  }else{
+    put('o-htop', m2(R.hTop));
+    put('o-hbot', m2(R.hBot));
+    put('o-hc',   m2(R.hc));
+    put('o-A',    R.A.toFixed(3)+' m²');
+    put('o-Ixc',  R.Ixc.toFixed(4)+' m⁴');
+    put('o-ptop', kPa(R.pTop));
+    put('o-pc',   kPa(R.pC));
+    put('o-pbot', kPa(R.pBot));
+    put('o-F',    fmtF(R.F));
+    put('o-yc',   isFinite(R.yc)? m2(R.yc) : '∞  (θ = 0)');
+    put('o-dy',   m2(R.dy));
+    put('o-yR',   isFinite(R.yR)? m2(R.yR) : '∞');
+    put('o-sR',   m2(R.sR));
+    put('o-hR',   m2(R.hR));
+    put('o-Mtop', fmtM(R.Mtop));
+    put('o-Mbot', fmtM(R.Mbot));
+    put('o-gamma',(R.rho*G/1000).toFixed(2)+' kN/m³');
+    putChk('o-chkF',R.fChk); putChk('o-chkS',R.sChk);
+  }
+}
+
+/* ==========================================================================
+   CONTROLS
+   ========================================================================== */
+const $=id=>document.getElementById(id);
+function syncInput(id,v){ const e=$(id); if(e && Math.abs(parseFloat(e.value)-v)>1e-9) e.value=v; }
+
+function clampState(){
+  st.L    = clamp(st.L, 0.5, 16);
+  st.theta= clamp(st.theta,0,90);
+  st.hTop = clamp(st.hTop, 0, 12);
+  st.R    = clamp(st.R, 0.4, 6);
+  st.hO   = clamp(st.hO, 0, 12);
+  st.span = clamp(st.span, 15, 90);
+  st.b    = clamp(st.b, 0.2, 10);
+  st.rho  = clamp(st.rho, 700, 13600);
+  // a plane at the free surface with θ = 0 carries no force — nudge it under
+  if(st.mode==='plane' && st.theta<0.5 && st.hTop<0.05) st.hTop=0.05;
+}
+function refreshChips(){
+  $('v-th').textContent  = st.theta.toFixed(1)+'°';
+  $('v-L').textContent   = st.L.toFixed(2)+' m';
+  $('v-ht').textContent  = st.hTop.toFixed(2)+' m';
+  $('v-R').textContent   = st.R.toFixed(2)+' m';
+  $('v-hO').textContent  = st.hO.toFixed(2)+' m';
+  $('v-span').textContent= st.span.toFixed(0)+'°';
+  $('v-b').textContent   = st.b.toFixed(2)+' m';
+  const sg=st.rho/1000;
+  $('v-rho').textContent = st.rho.toFixed(0)+' kg/m³ (SG '+sg.toFixed(2)+')';
+  $('chip').textContent  = surfaceKind();
+  $('b-hor').classList.toggle('active', st.mode==='plane' && st.theta<0.5);
+  $('b-ver').classList.toggle('active', st.mode==='plane' && st.theta>89.5);
+  $('b-inc').classList.toggle('active', st.mode==='plane' && st.theta>=0.5 && st.theta<=89.5);
+  $('b-cur').classList.toggle('active', st.mode==='curved');
+  $('planeCtl').classList.toggle('hidden', st.mode==='curved');
+  $('curvedCtl').classList.toggle('hidden', st.mode!=='curved');
+  $('b-sweep').classList.toggle('active', st.sweep);
+  $('b-pause').classList.toggle('active', st.paused);
+  $('tab-work').classList.toggle('active', st.tab==='work');
+  $('tab-read').classList.toggle('active', st.tab==='read');
+  $('work').classList.toggle('hidden', st.tab!=='work');
+  $('readout').classList.toggle('hidden', st.tab!=='read');
+  $('w-all').classList.toggle('active', st.step===0);
+  $('w-prev').disabled = (st.step===1);
+  $('w-next').disabled = (stepCount>0 && st.step>=stepCount);
+  if(st.tab!=='work') stepHL='all';
+  $('ahaNote').innerHTML = st.mode==='curved'
+    ? '<b>Aha demo:</b> press <i>▶ Sweep submergence</i> and watch the two moment bars in the'+
+      ' lower right. F<sub>x</sub> and F<sub>v</sub> both grow with head, yet their moments'+
+      ' about O stay exactly equal and opposite — the net moment never leaves zero. Then drag'+
+      ' the probe along the arc: every pressure arrow points at O, which is <i>why</i>. Change'+
+      ' the arc span or the radius; it still holds.'
+    : '<b>Aha demo:</b> set θ = 90° with h<sub>top</sub> = 0 — the prism is a triangle and the'+
+      ' CP sits at 2L/3, not L/2. Now press <i>▶ Sweep submergence</i>: as the plate goes deeper'+
+      ' the prism turns into a rectangle, Δy → 0 and the CP slides up onto the centroid. Slide'+
+      ' θ to 0 and Δy vanishes altogether — uniform pressure, CP = centroid.';
+}
+function bindRange(id,key,scale){
+  $(id).addEventListener('input',e=>{
+    st[key]=parseFloat(e.target.value)*(scale||1);
+    st.sweep=false; clampState(); refreshChips();
+  });
+}
+bindRange('s-th','theta'); bindRange('s-L','L'); bindRange('s-ht','hTop');
+bindRange('s-R','R'); bindRange('s-hO','hO'); bindRange('s-span','span');
+bindRange('s-b','b'); bindRange('s-rho','rho');
+
+$('t-arrows').addEventListener('change',e=>{st.arrows=e.target.checked;});
+$('t-dims').addEventListener('change',  e=>{st.dims=e.target.checked;});
+$('t-probe').addEventListener('change', e=>{st.probeOn=e.target.checked;});
+$('t-vol').addEventListener('change',   e=>{st.volOn=e.target.checked;});
+$('t-side').addEventListener('change',  e=>{st.above=e.target.checked; refreshChips();});
+
+function setMode(mode,theta){
+  const changed = (mode!==st.mode);
+  st.mode=mode; if(theta!==undefined){ st.theta=theta; syncInput('s-th',theta); }
+  if(changed){ st.step=0; roMode=null; }
+  st.sweep=false; clampState(); refreshChips();
+}
+$('b-hor').onclick=()=>setMode('plane',0);
+$('b-ver').onclick=()=>setMode('plane',90);
+$('b-inc').onclick=()=>setMode('plane', (st.theta<0.5||st.theta>89.5)?30:st.theta);
+$('b-cur').onclick=()=>setMode('curved');
+
+$('b-sweep').onclick=()=>{ st.sweep=!st.sweep; refreshChips(); };
+$('b-pause').onclick=()=>{ st.paused=!st.paused; refreshChips(); };
+
+/* ---------- worked-solution tabs and step-through ------------------------ */
+function bumpStep(d){
+  const n=Math.max(stepCount,1);
+  st.step = (st.step===0) ? (d>0?1:n) : clamp(st.step+d, 1, n);
+  renderSteps(solve(), true); refreshChips();
+}
+$('tab-work').onclick=()=>{ st.tab='work'; roMode=null; refreshChips(); renderSteps(solve(),true); };
+$('tab-read').onclick=()=>{ st.tab='read'; roMode=null; refreshChips(); };
+$('w-prev').onclick=()=>bumpStep(-1);
+$('w-next').onclick=()=>bumpStep(+1);
+$('w-all').onclick =()=>{ st.step=0; renderSteps(solve(),true); refreshChips(); };
+
+/* ---------- presets from the worked problems ------------------------------ */
+function applyPreset(p){
+  const changed = (p.mode && p.mode!==st.mode);
+  Object.assign(st,p); st.sweep=false; st.step=0;
+  if(changed) roMode=null;
+  clampState();
+  syncInput('s-th',st.theta); syncInput('s-L',st.L); syncInput('s-ht',st.hTop);
+  syncInput('s-R',st.R); syncInput('s-hO',st.hO); syncInput('s-span',st.span);
+  syncInput('s-b',st.b); syncInput('s-rho',st.rho);
+  $('t-side').checked=st.above;
+  refreshChips();
+}
+$('p1').onclick=()=>applyPreset({mode:'plane',theta:90,L:2.5,hTop:0,   b:1,rho:1000});
+$('p2').onclick=()=>applyPreset({mode:'plane',theta:45,L:14.142,hTop:0,b:1,rho:1000});
+$('p3').onclick=()=>applyPreset({mode:'plane',theta:30,L:3,   hTop:2,  b:2,rho:1000});
+$('p4').onclick=()=>applyPreset({mode:'plane',theta:53.13,L:3.5,hTop:0.265,b:2,rho:1000});
+$('p5').onclick=()=>applyPreset({mode:'curved',R:1,hO:0,span:90,b:3,rho:1000,above:false});
+$('p6').onclick=()=>applyPreset({mode:'curved',R:2,hO:3,span:90,b:2,rho:1000,above:false});
+$('b-reset').onclick=()=>applyPreset({mode:'plane',theta:30,L:3,hTop:2,b:2,rho:1000,
+                                      R:2,hO:3,span:90,above:false});
+
+/* ---------- draggable probe ---------------------------------------------- */
+function pickProbe(mx,my,testOnly){
+  if(!st.probeOn) return false;
+  const R=R_; if(!R) return false;
+  const set = f => { if(!testOnly) st.probe=clamp(f,0,1); return true; };
+  if(st.mode==='curved'){
+    const m=mapCurved; if(!m) return false;
+    const Ox=m.sx(0), Oy=m.sy(R.hO), rr=R.R*m.sc;
+    const d=Math.hypot(mx-Ox,my-Oy);
+    if(Math.abs(d-rr)>26) return false;
+    let ph=Math.atan2(-(my-Oy), mx-Ox);            // screen y is inverted
+    while(ph>0) ph-=2*Math.PI;                     // bring into the third/fourth quadrant
+    while(ph<-2*Math.PI) ph+=2*Math.PI;
+    const f=(ph-(R.phi1-2*Math.PI))/(R.phi2-R.phi1);
+    if(f<-0.12||f>1.12) return false;
+    return set(f);
+  }else{
+    const m=mapPlane; if(!m) return false;
+    const xa=-R.L*R.c/2, Ax=m.sx(xa), Ay=m.sy(R.hTop);
+    const Bx=m.sx(R.L*R.c/2), By=m.sy(R.hBot);
+    const dx=Bx-Ax, dy=By-Ay, LL=dx*dx+dy*dy; if(LL<1) return false;
+    const t=((mx-Ax)*dx+(my-Ay)*dy)/LL;
+    const px=Ax+dx*clamp(t,0,1), py=Ay+dy*clamp(t,0,1);
+    if(Math.hypot(mx-px,my-py)>26) return false;
+    return set(t);
+  }
+}
+function evPos(e){
+  const r=cv.getBoundingClientRect();
+  const t=(e.touches&&e.touches[0])||e;
+  return [t.clientX-r.left, t.clientY-r.top];
+}
+cv.addEventListener('pointerdown',e=>{
+  const [x,y]=evPos(e);
+  if(pickProbe(x,y)){ st.drag=true; cv.setPointerCapture(e.pointerId); e.preventDefault(); }
+});
+cv.addEventListener('pointermove',e=>{
+  const [x,y]=evPos(e);
+  if(st.drag){ pickProbe(x,y,false); e.preventDefault(); }
+  else cv.style.cursor = pickProbe(x,y,true) ? 'grab' : 'default';
+});
+['pointerup','pointercancel','pointerleave'].forEach(t=>
+  cv.addEventListener(t,()=>{ st.drag=false; }));
+
+/* ---------- go ------------------------------------------------------------ */
+resize(); clampState(); refreshChips(); solve();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

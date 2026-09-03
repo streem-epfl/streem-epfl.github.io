@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hydraulic Jump in Open Channel Flow</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../assets/vendor/katex/katex.min.css">
+<script defer src="../../assets/vendor/katex/katex.min.js"></script>
+<script defer src="../../assets/scripts/streem-math.js"></script>
+<style>
+  :root{
+    --bg:#f5f5f5; --panel:#ffffff; --panel2:#f0f0f0; --ink:#1d1d1b; --dim:#5c5c5c;
+    --accent:#e30613; --sub:#006d9c; --crit:#9b5b00; --sup:#e30613; --line:#d6d6d6;
+    --ok:#08783f; --violet:#5c257e;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; overflow:hidden; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",system-ui,sans-serif;}
+  .panel{position:absolute; background:color-mix(in srgb, var(--panel) 92%, transparent);
+    border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+    backdrop-filter:blur(6px); font-size:13px; line-height:1.45; z-index:2;}
+  #ui{left:12px; top:12px; width:252px; max-height:calc(100% - 24px); overflow-y:auto;}
+  #readout{right:12px; top:12px; width:400px; max-height:calc(100% - 24px); overflow-y:auto;}
+  #actions{left:50%; transform:translateX(-50%); bottom:12px; display:flex; gap:8px; padding:8px;}
+  #stage{position:absolute; inset:0; padding:12px 426px 64px 278px;
+    display:flex; flex-direction:column; gap:10px;}
+  canvas.view{width:100%; height:100%; display:block; background:var(--panel);
+    border:1px solid var(--line); border-radius:10px;}
+  #flumeWrap{flex:0.95; min-height:0; position:relative;}
+  #chartWrap{flex:1.05; min-height:0; position:relative;}
+  h1{font-size:14px; margin-bottom:2px; color:var(--accent);}
+  .sub{color:var(--dim); font-size:11px; margin-bottom:10px;}
+  h2{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim);
+    margin:12px 0 6px; border-bottom:1px solid var(--line); padding-bottom:3px;}
+  label.row{display:flex; justify-content:space-between; align-items:center; margin:7px 0 2px;
+    font-size:12.5px;}
+  label.row .val{color:var(--accent); font-variant-numeric:tabular-nums; font-weight:600;}
+  input[type=range]{width:100%; accent-color:var(--accent);}
+  .chk{display:flex; align-items:center; gap:7px; margin:6px 0; font-size:12.5px; cursor:pointer;}
+  .chk input{accent-color:var(--accent);}
+  button{background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    border-radius:7px; padding:7px 13px; font-size:12.5px; cursor:pointer;}
+  button:hover{border-color:var(--accent); color:var(--accent);}
+  button.active{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600;}
+  table.vals{width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums;}
+  table.vals td{padding:2.5px 0; font-size:12.5px;}
+  table.vals td:first-child{color:var(--dim);}
+  table.vals td:last-child{text-align:right; font-weight:600;}
+  .formula{font-family:Cambria,Georgia,serif; font-style:italic; font-size:12.5px;
+    color:#353535; background:var(--panel2); border-radius:6px; padding:7px 9px; margin-top:6px;}
+  .formula .katex-display{margin:0; overflow-x:auto; overflow-y:hidden;}
+  .note{font-size:11px; color:var(--dim); margin-top:8px;}
+  #type{margin-top:8px; padding:7px 10px; border-radius:7px; text-align:center; font-weight:700;
+    font-size:13px; background:var(--ok); color:#fff;}
+  @media (max-width:1150px){
+    html,body{overflow-y:auto; height:auto; min-height:100%;}
+    body{display:flex; flex-direction:column;}
+    .panel{position:static; width:auto; max-height:none; margin:10px 12px 0;}
+    #ui{order:1;} #stage{order:2; position:static; padding:10px 12px;}
+    #actions{order:3; align-self:center; transform:none;} #readout{order:4; margin-bottom:12px;}
+    #flumeWrap{flex:none; height:280px;} #chartWrap{flex:none; height:430px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="ui" class="panel">
+  <h1>Hydraulic Jump</h1>
+  <div class="sub">OpenHydroLab · Rectangular flume, b = 0.20 m, horizontal bed</div>
+
+  <h2>Supercritical inflow (section 1)</h2>
+  <div>
+    <label for="s-y1" class="row">Inflow depth y₁ <span class="val" id="v-y1"></span></label>
+    <input type="range" id="s-y1" min="8" max="50" step="1" value="20">
+  </div>
+  <div>
+    <label for="s-Fr" class="row">Froude number Fr₁ <span class="val" id="v-Fr"></span></label>
+    <input type="range" id="s-Fr" min="1.05" max="10.9" step="0.05" value="5">
+  </div>
+  <div class="note" id="frCap"></div>
+
+  <h2>Show</h2>
+  <label class="chk"><input type="checkbox" id="t-part" checked> Water particles (u = q/h)</label>
+  <label class="chk"><input type="checkbox" id="t-egl" checked> Energy grade line + h_L drop</label>
+  <label class="chk"><input type="checkbox" id="t-yc" checked> Critical-depth line y꜀</label>
+  <label class="chk"><input type="checkbox" id="t-foam" checked> Roller turbulence (foam)</label>
+
+  <div class="note"><b>Aha demo:</b> in the <i>E–y &amp; M–y</i> view, press <i>Sweep Fr₁</i>:
+  y₁ and y₂ always sit on the <b>same vertical line</b> of the M–y diagram (momentum
+  conserved) but on <b>different</b> E values of the E–y diagram — the gap is h_L, the
+  energy destroyed by the roller. A sluice gate pairs depths the other way round
+  (same E, different M): <b>alternate</b> depths vs <b>sequent</b> depths in one picture.</div>
+</div>
+
+<div id="readout" class="panel">
+  <h2 style="margin-top:0">Flow</h2>
+  <table class="vals">
+    <tr><td>q = V₁·y₁</td><td id="o-q"></td></tr>
+    <tr><td>Q = q·b</td><td id="o-Q"></td></tr>
+    <tr><td>V₁ = Fr₁·√(gy₁)</td><td id="o-V1"></td></tr>
+    <tr><td>V₂ = q/y₂</td><td id="o-V2"></td></tr>
+    <tr><td>Fr₂ (subcritical)</td><td id="o-Fr2"></td></tr>
+    <tr><td>Critical depth y꜀</td><td id="o-yc"></td></tr>
+  </table>
+
+  <h2>Jump geometry</h2>
+  <table class="vals">
+    <tr><td>Sequent depth y₂</td><td id="o-y2"></td></tr>
+    <tr><td>Height h_j = y₂ − y₁</td><td id="o-hj"></td></tr>
+    <tr><td>Relative height h_j/E₁</td><td id="o-hjE1"></td></tr>
+    <tr><td>Length L = 9.75·y₁·(Fr₁−1)^1.01 (empirical)</td><td id="o-L"></td></tr>
+    <tr><td>Relative length L/y₁</td><td id="o-Ly1"></td></tr>
+  </table>
+  <div id="type">STEADY JUMP</div>
+
+  <h2>Momentum (conserved across the jump)</h2>
+  <table class="vals">
+    <tr><td>M₁ = q²/(gy₁) + y₁²/2</td><td id="o-M1"></td></tr>
+    <tr><td>M₂ = q²/(gy₂) + y₂²/2</td><td id="o-M2"></td></tr>
+    <tr><td>Momentum check |M₁ − M₂|/M₁</td><td id="o-Mchk"></td></tr>
+  </table>
+
+  <h2>Energy (destroyed by the roller)</h2>
+  <table class="vals">
+    <tr><td>E₁ = y₁ + V₁²/2g</td><td id="o-E1"></td></tr>
+    <tr><td>E₂ = y₂ + V₂²/2g</td><td id="o-E2"></td></tr>
+    <tr><td>h_L = E₁ − E₂</td><td id="o-hL"></td></tr>
+    <tr><td>h_L = (y₂−y₁)³/(4y₁y₂)</td><td id="o-hL10"></td></tr>
+    <tr><td>Energy dissipated h_L/E₁</td><td id="o-diss"></td></tr>
+    <tr><td>Efficiency E₂/E₁</td><td id="o-eff"></td></tr>
+  </table>
+  <div class="formula">
+    Bélanger:&nbsp; y₂/y₁ = ½(√(1+8Fr₁²) − 1)<br>
+    M = q²/(gy) + y²/2 &nbsp;(specific force ÷ ρg, per unit width)<br>
+    h_L = (y₂−y₁)³/(4y₁y₂) &nbsp;·&nbsp; L/y₁ = 9.75(Fr₁−1)^1.01<br>
+    E₂/E₁ = [(1+8Fr₁²)^{3/2} − 4Fr₁² + 1] / [8Fr₁²(2+Fr₁²)]
+  </div>
+  <div class="note">Self-checks: M₁ and M₂ are computed independently each frame — their
+  equality is the momentum principle the Bélanger equation comes from. The two h_L rows
+  (energy balance vs momentum-derived formula) must also agree exactly, and do.</div>
+</div>
+
+<div id="stage">
+  <div id="flumeWrap"><canvas id="flume" class="view"></canvas></div>
+  <div id="chartWrap"><canvas id="chart" class="view"></canvas></div>
+</div>
+
+<div id="actions" class="panel">
+  <button id="b-diag" class="active">E–y &amp; M–y diagrams</button>
+  <button id="b-curves">Curves vs Fr₁</button>
+  <button id="b-sweep">▶ Sweep Fr₁</button>
+  <button id="b-pause">⏸ Pause</button>
+  <button id="b-reset">Reset</button>
+</div>
+
+<script>
+'use strict';
+/* ---------------- physics (lab manual Eqs. 1-13) ---------------- */
+const G=9.81, B=0.20, YMAXF=0.30;               // gravity, flume width, max flume depth (m)
+const st={y1:0.020, Fr:5, part:true, egl:true, ycl:true, foam:true, sweep:false,
+  paused:false, view:'diag'};
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const mm=v=>(v*1000).toFixed(1)+' mm';
+
+const seqRatio = F => 0.5*(Math.sqrt(1+8*F*F)-1);                      // Eq. 6
+const effTh    = F => (Math.pow(1+8*F*F,1.5)-4*F*F+1)/(8*F*F*(2+F*F)); // Eq. 13
+const hjE1Th   = F => (Math.sqrt(1+8*F*F)-3)/(2+F*F);                  // Eq. 12
+const LY1Th    = F => 9.75*Math.pow(F-1,1.01);                          // Eq. 11
+const frMax    = y1 => Math.min(10.9, Math.sqrt((Math.pow(2*YMAXF/y1+1,2)-1)/8));
+
+function solve(){
+  const y1=st.y1, Fr=st.Fr;
+  const V1=Fr*Math.sqrt(G*y1), q=V1*y1, Q=q*B;
+  const y2=y1*seqRatio(Fr), V2=q/y2, Fr2=V2/Math.sqrt(G*y2);
+  const yc=Math.cbrt(q*q/G);
+  const E1=y1+V1*V1/(2*G), E2=y2+V2*V2/(2*G);
+  const hL=E1-E2, hL10=Math.pow(y2-y1,3)/(4*y1*y2);   // energy balance & momentum-derived
+  const L=(Fr>1)?9.75*y1*Math.pow(Fr-1,1.01):0;
+  const Mfun=y=>q*q/(G*y)+y*y/2;                      // specific force ÷ ρg, per unit width
+  const M1=Mfun(y1), M2=Mfun(y2);
+  return {y1,Fr,V1,V2,Fr2,q,Q,y2,yc,E1,E2,hL,hL10,L,M1,M2,Mfun,
+    hj:y2-y1, hjE1:(y2-y1)/E1, eff:E2/E1, diss:hL/E1};
+}
+const TYPES=[ // [FrMin, FrMax, name, color]
+  [1.0,1.7,'UNDULAR JUMP','#006d9c'],[1.7,2.5,'WEAK JUMP','#00796b'],
+  [2.5,4.5,'OSCILLATING JUMP','#9b5b00'],[4.5,9.0,'STEADY JUMP','#08783f'],
+  [9.0,99,'STRONG JUMP','#e30613']];
+const jumpType=F=>TYPES.find(t=>F>=t[0]&&F<t[1]);
+
+/* ---------------- UI ---------------- */
+const $=id=>document.getElementById(id);
+function labelReadoutMath(rowIndex, text, tex){
+  const cell=document.querySelectorAll('#readout table.vals tr')[rowIndex]?.firstElementChild;
+  if(!cell) return;
+  cell.replaceChildren(document.createTextNode(text));
+  const math=document.createElement('span');
+  math.dataset.tex=tex;
+  cell.append(math);
+}
+labelReadoutMath(0, '', String.raw`q=V_1y_1`);
+labelReadoutMath(1, '', String.raw`Q=qb`);
+labelReadoutMath(2, '', String.raw`V_1=Fr_1\sqrt{gy_1}`);
+labelReadoutMath(3, '', String.raw`V_2=\frac{q}{y_2}`);
+labelReadoutMath(6, 'Height ', String.raw`h_j=y_2-y_1`);
+labelReadoutMath(7, 'Relative height ', String.raw`\frac{h_j}{E_1}`);
+labelReadoutMath(8, 'Length ', String.raw`L=9.75y_1(Fr_1-1)^{1.01}`);
+labelReadoutMath(9, 'Relative length ', String.raw`\frac{L}{y_1}`);
+labelReadoutMath(10, '', String.raw`M_1=\frac{q^2}{gy_1}+\frac{y_1^2}{2}`);
+labelReadoutMath(11, '', String.raw`M_2=\frac{q^2}{gy_2}+\frac{y_2^2}{2}`);
+labelReadoutMath(12, 'Momentum check ', String.raw`\frac{|M_1-M_2|}{M_1}`);
+labelReadoutMath(13, '', String.raw`E_1=y_1+\frac{V_1^2}{2g}`);
+labelReadoutMath(14, '', String.raw`E_2=y_2+\frac{V_2^2}{2g}`);
+labelReadoutMath(15, '', String.raw`h_L=E_1-E_2`);
+labelReadoutMath(16, '', String.raw`h_L=\frac{(y_2-y_1)^3}{4y_1y_2}`);
+labelReadoutMath(17, 'Energy dissipated ', String.raw`\frac{h_L}{E_1}`);
+labelReadoutMath(18, 'Efficiency ', String.raw`\frac{E_2}{E_1}`);
+const jumpFormula = document.querySelector('#readout .formula');
+jumpFormula.dataset.tex = String.raw`\begin{aligned}
+\frac{y_2}{y_1} &= \frac{1}{2}\left(\sqrt{1+8Fr_1^2}-1\right) \\
+M &= \frac{q^2}{g y}+\frac{y^2}{2} \\
+h_L &= \frac{(y_2-y_1)^3}{4y_1y_2}, \qquad \frac{L}{y_1}=9.75(Fr_1-1)^{1.01} \\
+\frac{E_2}{E_1} &= \frac{(1+8Fr_1^2)^{3/2}-4Fr_1^2+1}{8Fr_1^2(2+Fr_1^2)}
+\end{aligned}`;
+jumpFormula.dataset.texDisplay = 'block';
+function syncChips(){
+  $('v-y1').textContent=(st.y1*1000).toFixed(0)+' mm';
+  $('v-Fr').textContent=st.Fr.toFixed(2);
+  const fm=frMax(st.y1);
+  $('frCap').textContent = fm<10.9
+    ? `Fr₁ capped at ${fm.toFixed(1)} so y₂ fits the ${YMAXF*1000} mm flume — reduce y₁ to reach stronger jumps.`
+    : 'Full Fr₁ range available at this y₁.';
+}
+function refreshFrRange(){
+  const s=$('s-Fr'), fm=frMax(st.y1);
+  s.max=fm.toFixed(2);
+  st.Fr=clamp(st.Fr,1.05,fm); s.value=st.Fr;
+}
+$('s-y1').addEventListener('input',e=>{ st.y1=e.target.value/1000; refreshFrRange(); syncChips(); });
+$('s-Fr').addEventListener('input',e=>{ st.Fr=parseFloat(e.target.value); syncChips(); });
+['part','egl','yc','foam'].forEach((k,i)=>{
+  const ids=['t-part','t-egl','t-yc','t-foam'], keys=['part','egl','ycl','foam'];
+  $(ids[i]).addEventListener('change',e=>st[keys[i]]=e.target.checked);
+});
+$('b-sweep').onclick=()=>{ st.sweep=!st.sweep; $('b-sweep').classList.toggle('active',st.sweep); };
+$('b-pause').onclick=()=>{ st.paused=!st.paused; $('b-pause').classList.toggle('active',st.paused); };
+const setChartView=v=>{ st.view=v;
+  $('b-diag').classList.toggle('active',v==='diag');
+  $('b-curves').classList.toggle('active',v==='curves'); };
+$('b-diag').onclick=()=>setChartView('diag');
+$('b-curves').onclick=()=>setChartView('curves');
+$('b-reset').onclick=()=>{ st.y1=0.020; st.Fr=5; st.sweep=false; st.paused=false;
+  $('s-y1').value=20; refreshFrRange();
+  $('b-sweep').classList.remove('active'); $('b-pause').classList.remove('active'); syncChips(); };
+refreshFrRange(); syncChips();
+
+/* ---------------- readout ---------------- */
+function updateReadout(r){
+  $('o-q').textContent=r.q.toFixed(4)+' m²/s';
+  $('o-Q').textContent=(r.Q*1000).toFixed(2)+' L/s';
+  $('o-V1').textContent=r.V1.toFixed(3)+' m/s';
+  $('o-V2').textContent=r.V2.toFixed(3)+' m/s';
+  $('o-Fr2').textContent=r.Fr2.toFixed(3);
+  $('o-yc').textContent=mm(r.yc);
+  $('o-y2').textContent=mm(r.y2);
+  $('o-hj').textContent=mm(r.hj);
+  $('o-hjE1').textContent=r.hjE1.toFixed(3)+'  (theory: '+hjE1Th(r.Fr).toFixed(3)+')';
+  const setH=(id,t)=>{$(id).innerHTML=t;};
+  const Mrel=Math.abs(r.M1-r.M2)/r.M1;
+  setH('o-M1',(r.M1*1e4).toFixed(3)+'×10⁻⁴ m²');
+  setH('o-M2',(r.M2*1e4).toFixed(3)+'×10⁻⁴ m²');
+  setH('o-Mchk',(Mrel*100).toExponential(1)+' % '+(Mrel<1e-9?'<span style="color:var(--ok)">✓</span>':'✗'));
+  $('o-L').textContent=(r.L*1000).toFixed(0)+' mm';
+  $('o-Ly1').textContent=(r.L/r.y1).toFixed(1);
+  $('o-E1').textContent=mm(r.E1); $('o-E2').textContent=mm(r.E2);
+  $('o-hL').textContent=mm(r.hL); $('o-hL10').textContent=mm(r.hL10);
+  $('o-diss').textContent=(r.diss*100).toFixed(1)+' %';
+  $('o-eff').textContent=r.eff.toFixed(3)+'  (theory: '+effTh(r.Fr).toFixed(3)+')';
+  const t=jumpType(r.Fr), el=$('type');
+  el.textContent=`${t[2]}  (Fr₁ = ${r.Fr.toFixed(2)})`;
+  el.style.background=t[3];
+  el.style.color = '#fff';
+}
+
+/* ---------------- flume view ---------------- */
+const XTOE=0.55, TSCALE=0.4, HMAX=0.36;
+function surface(x,r,t){                    // water surface elevation along the flume
+  if (x<=XTOE) return r.y1;
+  const L=Math.max(r.L,0.02);
+  if (x<XTOE+L){
+    const s=(x-XTOE)/L;
+    let h=r.y1+(r.y2-r.y1)*s*s*(3-2*s);     // smooth jump profile (schematic shape, true endpoints)
+    if (st.foam && r.Fr>1.7)                // roller surface churn (cosmetic, small)
+      h+=0.05*(r.y2-r.y1)*Math.sin(23*x-7*t)*Math.sin(31*x+5.3*t)*s*(1-s)*4;
+    return h;
+  }
+  // undular tail for low-Froude jumps (physically expected for Fr1 < ~1.7)
+  const und=clamp((1.9-r.Fr)/0.85,0,1);
+  if (und>0){
+    const lam=6*r.y2, xr=x-(XTOE+L);
+    return r.y2+und*0.30*(r.y2-r.y1)*Math.cos(2*Math.PI*xr/lam - 1.2*t)*Math.exp(-xr/(2.5*lam));
+  }
+  return r.y2;
+}
+const NP=110, px=new Float32Array(NP), pxi=new Float32Array(NP);
+const NF=70, fph=new Float32Array(NF), fr_=new Float32Array(NF), fx0=new Float32Array(NF);
+for(let i=0;i<NP;i++){ px[i]=Math.random()*3; pxi[i]=0.08+0.84*Math.random(); }
+for(let i=0;i<NF;i++){ fph[i]=Math.random()*7; fr_[i]=0.3+0.7*Math.random(); fx0[i]=Math.random(); }
+
+function fitCanvas(cv){
+  const dpr=Math.min(devicePixelRatio,2), w=cv.clientWidth, h=cv.clientHeight;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=w*dpr;cv.height=h*dpr;}
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); return [ctx,w,h];
+}
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function drawFlume(r,t,dt){
+  const [ctx,W,H]=fitCanvas($('flume'));
+  ctx.clearRect(0,0,W,H);
+  const XLEN=Math.max(3.0, XTOE+r.L+0.55);
+  const M={l:52,r:14,t:24,b:44};
+  const sx=(W-M.l-M.r)/XLEN;
+  const need=Math.max(r.E1*1.3, r.y2*1.35, 0.12);          // vertical extent to display
+  const ex=clamp((H-M.t-M.b)/need/sx, 1, 3);               // declared vertical exaggeration ≤3×
+  const sy=sx*ex;
+  const X=x=>M.l+x*sx, Y=h=>H-M.b-h*sy;
+  ctx.font='12px Segoe UI'; ctx.fillStyle=css('--dim');
+  ctx.fillText(`Flume side view (reach ${XLEN.toFixed(1)} m, `
+    +(ex>1.05?`vertical ×${ex.toFixed(1)} exaggerated`:'true scale')
+    +`) — u = q/h, time ×${TSCALE}`, M.l, 15);
+
+  // water
+  ctx.beginPath(); ctx.moveTo(X(0),Y(0));
+  for(let x=0;x<=XLEN;x+=XLEN/300) ctx.lineTo(X(x),Y(surface(x,r,t)));
+  ctx.lineTo(X(XLEN),Y(0)); ctx.closePath();
+  ctx.fillStyle='rgba(102,191,227,0.55)'; ctx.fill();
+  ctx.strokeStyle='#005a85'; ctx.lineWidth=1.6; ctx.beginPath();
+  for(let x=0;x<=XLEN;x+=XLEN/300){const p=[X(x),Y(surface(x,r,t))]; x===0?ctx.moveTo(...p):ctx.lineTo(...p);}
+  ctx.stroke();
+
+  // bed
+  ctx.strokeStyle='#aaa6a0'; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.moveTo(X(0),Y(0)); ctx.lineTo(X(XLEN),Y(0)); ctx.stroke();
+
+  // particles by continuity
+  if(st.part){
+    ctx.fillStyle='#173f55';
+    for(let i=0;i<NP;i++){
+      const h=Math.max(surface(px[i],r,t),1e-3), u=r.q/h;
+      px[i]+=u*dt*TSCALE;
+      if(px[i]>XLEN){ px[i]=0; pxi[i]=0.08+0.84*Math.random(); }
+      ctx.beginPath(); ctx.arc(X(px[i]),Y(pxi[i]*Math.max(surface(px[i],r,t),1e-3)),1.6,0,7); ctx.fill();
+    }
+  }
+  // roller foam — recirculation in the upper part of the jump (Fr1 > 1.7)
+  if(st.foam && r.Fr>1.7){
+    ctx.fillStyle='rgba(255,255,255,0.85)';
+    const Lr=0.7*r.L, n=Math.round(NF*clamp((r.Fr-1.7)/7,0.25,1));
+    for(let i=0;i<n;i++){
+      const ph=fph[i]+t*(1.4*r.V1/Math.max(Lr,0.05));
+      const cx=XTOE+fx0[i]*Lr, s=(cx-XTOE)/Math.max(r.L,0.02);
+      const hS=r.y1+(r.y2-r.y1)*s*s*(3-2*s);
+      const ex=0.12*Lr*fr_[i], ey=0.28*hS*fr_[i];
+      ctx.beginPath();
+      ctx.arc(X(cx+ex*Math.cos(ph)), Y(hS*0.78+ey*Math.sin(ph)*0.6), 1.9, 0, 7);
+      ctx.fill();
+    }
+  }
+
+  // clamped label with a white plate and dark border for readability over water
+  const label=(txt,x,y,color)=>{
+    ctx.font='600 12.5px Segoe UI';
+    const w=ctx.measureText(txt).width, padX=5, padY=4, top=y-10-padY, h=13+2*padY;
+    const xx=clamp(x, M.l+padX, W-M.r-w-padX);
+    ctx.beginPath(); ctx.roundRect(xx-padX,top,w+2*padX,h,5);
+    ctx.fillStyle='rgba(255,255,255,0.96)'; ctx.fill();
+    ctx.strokeStyle='#3f3f3f'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle=color; ctx.fillText(txt,xx,y);
+  };
+  // EGL with hL drop
+  if(st.egl){
+    ctx.strokeStyle='#3f3f3f'; ctx.setLineDash([6,4]); ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(X(0),Y(r.E1)); ctx.lineTo(X(XTOE),Y(r.E1));
+    ctx.lineTo(X(XTOE+r.L),Y(r.E2)); ctx.lineTo(X(XLEN),Y(r.E2)); ctx.stroke();
+    ctx.setLineDash([]);
+    // hL arrow at the end of the jump
+    const ax=X(XTOE+r.L)+22;
+    ctx.strokeStyle=css('--sup'); ctx.beginPath();
+    ctx.moveTo(ax,Y(r.E1)); ctx.lineTo(ax,Y(r.E2)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ax,Y(r.E2)); ctx.lineTo(ax-4,Y(r.E2)-6); ctx.lineTo(ax+4,Y(r.E2)-6);
+    ctx.closePath(); ctx.fillStyle=css('--sup'); ctx.fill();
+    label(`h_L = ${(r.hL*1000).toFixed(1)} mm  (${(r.diss*100).toFixed(0)}% of E₁ dissipated)`,
+      ax+8, Y(r.E1)+18, css('--sup'));
+    label(`EGL  E₁ = ${(r.E1*1000).toFixed(0)} mm`, X(0.02), Y(r.E1)-8, css('--ink'));
+    label(`E₂ = ${(r.E2*1000).toFixed(0)} mm`, X(XLEN)-92, Y(r.E2)-8, css('--ink'));
+  }
+  // critical depth line
+  if(st.ycl){
+    ctx.strokeStyle=css('--crit'); ctx.setLineDash([6,4]); ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(X(0),Y(r.yc)); ctx.lineTo(X(XLEN),Y(r.yc)); ctx.stroke();
+    ctx.setLineDash([]);
+    label(`y꜀ = ${(r.yc*1000).toFixed(1)} mm  (y₁ < y꜀ < y₂)`, X(XLEN)-230, Y(r.yc)+16, css('--crit'));
+  }
+  // depth + length annotations
+  const dim=(x,h,color,txt,ty)=>{
+    ctx.strokeStyle=color; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(X(x),Y(0)); ctx.lineTo(X(x),Y(h)); ctx.stroke();
+    label(txt, X(x)+6, ty??Y(h/2), color);
+  };
+  dim(0.18, r.y1, css('--sup'), `y₁ = ${(r.y1*1000).toFixed(0)} mm  Fr₁ = ${r.Fr.toFixed(2)}`, Y(r.y1)-10);
+  dim(XTOE+r.L+0.30, r.y2, css('--sub'), `y₂ = ${(r.y2*1000).toFixed(1)} mm  Fr₂ = ${r.Fr2.toFixed(2)}`, Y(r.y2)-8);
+  // jump length bracket
+  ctx.strokeStyle=css('--ok'); ctx.lineWidth=1.2;
+  const yb=Y(0)+14;
+  ctx.beginPath(); ctx.moveTo(X(XTOE),yb); ctx.lineTo(X(XTOE+r.L),yb); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(X(XTOE),yb-4); ctx.lineTo(X(XTOE),yb+4); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(X(XTOE+r.L),yb-4); ctx.lineTo(X(XTOE+r.L),yb+4); ctx.stroke();
+  label(`L = ${(r.L*1000).toFixed(0)} mm = ${(r.L/r.y1).toFixed(1)}·y₁  (empirical)`, X(XTOE+r.L/2)-80, yb+16, css('--ok'));
+}
+
+/* ---------------- theoretical curves chart (lab figures a, b, c) ---------------- */
+function drawChart(r){
+  const [ctx,W,H]=fitCanvas($('chart'));
+  ctx.clearRect(0,0,W,H);
+  const M={l:56,r:56,t:34,b:40};
+  const F0=1, F1=11;
+  const X=F=>M.l+(F-F0)/(F1-F0)*(W-M.l-M.r);
+  const YL=v=>H-M.b-v*(H-M.t-M.b);            // left axis 0..1
+  const LMAX=110, YR=v=>H-M.b-(v/LMAX)*(H-M.t-M.b);
+
+  // jump-type bands
+  ctx.font='600 10.5px Segoe UI';
+  for(const [a,b,name,col] of TYPES){
+    const x0=X(Math.max(a,F0)), x1=X(Math.min(b,F1));
+    ctx.fillStyle=col+'14'; ctx.fillRect(x0,M.t,x1-x0,H-M.t-M.b);
+    ctx.fillStyle=col;
+    ctx.save(); ctx.translate(x0+9,M.t+8); ctx.rotate(Math.PI/2);
+    ctx.fillText(name,0,0); ctx.restore();
+  }
+  // axes + grid
+  ctx.strokeStyle=css('--line'); ctx.font='11px Segoe UI';
+  for(let F=1;F<=F1;F++){ ctx.beginPath(); ctx.moveTo(X(F),M.t); ctx.lineTo(X(F),H-M.b); ctx.stroke();
+    ctx.fillStyle=css('--dim'); ctx.fillText(F,X(F)-3,H-M.b+16); }
+  for(let v=0;v<=1.001;v+=0.2){ ctx.beginPath(); ctx.moveTo(M.l,YL(v)); ctx.lineTo(W-M.r,YL(v)); ctx.stroke();
+    ctx.fillStyle=css('--dim'); ctx.fillText(v.toFixed(1),M.l-26,YL(v)+4);
+    ctx.fillText(Math.round(v*LMAX),W-M.r+8,YL(v)+4); }
+  ctx.fillStyle=css('--ink'); ctx.font='600 12px Segoe UI';
+  ctx.fillText('Fr₁', W/2-8, H-8);
+  ctx.fillText('Theoretical jump curves vs Fr₁', M.l, 16);
+  ctx.save(); ctx.translate(14,H/2+64); ctx.rotate(-Math.PI/2);
+  ctx.fillText('E₂/E₁ ,  h_j/E₁  [-]',0,0); ctx.restore();
+  ctx.save(); ctx.translate(W-12,H/2+30); ctx.rotate(-Math.PI/2);
+  ctx.fillText('L/y₁  [-]',0,0); ctx.restore();
+
+  const plot=(fn,Ymap,color,dashPat)=>{
+    ctx.strokeStyle=color; ctx.lineWidth=2; if(dashPat)ctx.setLineDash(dashPat);
+    ctx.beginPath(); let s=false;
+    for(let F=1.02;F<=F1;F+=0.02){ const v=fn(F), y=Ymap(v);
+      if(y<M.t){ s=false; continue; }
+      s?ctx.lineTo(X(F),y):(ctx.moveTo(X(F),y),s=true); }
+    ctx.stroke(); ctx.setLineDash([]);
+  };
+  plot(effTh,YL,css('--accent'));
+  plot(hjE1Th,YL,css('--violet'),[7,4]);
+  plot(LY1Th,YR,css('--ok'),[2,3]);
+
+  // legend
+  ctx.font='600 12px Segoe UI';
+  const leg=[[css('--accent'),'E₂/E₁ efficiency'],[css('--violet'),'h_j/E₁ relative height'],
+    [css('--ok'),'L/y₁ relative length (empirical) →']];
+  const lx=M.l+(W-M.l-M.r)*0.36;
+  ctx.beginPath(); ctx.roundRect(lx-8, M.t+4, 232, 56, 5);
+  ctx.fillStyle='rgba(255,255,255,0.96)'; ctx.fill();
+  ctx.strokeStyle='#3f3f3f'; ctx.lineWidth=1; ctx.stroke();
+  leg.forEach(([c,txt],i)=>{ ctx.fillStyle=c; ctx.fillText(txt, lx, M.t+18+i*17); });
+
+  // current state markers
+  ctx.strokeStyle='#3f3f3f'; ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(X(r.Fr),M.t); ctx.lineTo(X(r.Fr),H-M.b); ctx.stroke(); ctx.setLineDash([]);
+  const dot=(y,c)=>{ ctx.fillStyle=c; ctx.beginPath(); ctx.arc(X(r.Fr),y,5,0,7); ctx.fill(); };
+  dot(YL(r.eff),css('--accent')); dot(YL(r.hjE1),css('--violet')); dot(YR(r.L/r.y1),css('--ok'));
+  ctx.fillStyle=css('--ink');
+  ctx.fillText(`Fr₁ = ${r.Fr.toFixed(2)}`, X(r.Fr)+7, M.t+12);
+}
+
+/* ------- paired E–y and M–y diagrams (shared depth axis) -------
+   The whole theory in one picture: the jump keeps M (sequent depths on one
+   vertical line of the M–y diagram) while E drops by h_L on the E–y diagram. */
+function drawDiagrams(r){
+  const [ctx,W,H]=fitCanvas($('chart'));
+  ctx.clearRect(0,0,W,H);
+  const M={l:56,mid:34,r:16,t:40,b:40};
+  const half=(W-M.l-M.mid-M.r)/2;
+  const ymax=Math.max(r.y2*1.25, r.E1*1.08, 0.02);
+  const Emax=Math.max(r.E1*1.15, r.y2*1.1);
+  const Mmax=r.M1*1.35;
+  const Y=y=>H-M.b-(y/ymax)*(H-M.t-M.b);
+  const XE=E=>M.l+(E/Emax)*half;                       // left panel: E–y
+  const XM=m=>M.l+half+M.mid+(m/Mmax)*half;            // right panel: M–y
+  ctx.font='11px Segoe UI';
+
+  // shared horizontal depth guides through y1, y2 (link the two panels)
+  for(const [y,c] of [[r.y1,css('--sup')],[r.y2,css('--sub')],[r.yc,css('--crit')]]){
+    ctx.strokeStyle=c+'55'; ctx.setLineDash([3,5]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(M.l,Y(y)); ctx.lineTo(W-M.r,Y(y)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // y-axis labels
+  ctx.fillStyle=css('--dim');
+  for(const [y,txt] of [[r.y1,'y₁'],[r.yc,'y꜀'],[r.y2,'y₂']])
+    ctx.fillText(txt, M.l-24, Y(y)+4);
+  ctx.save(); ctx.translate(13,H/2+40); ctx.rotate(-Math.PI/2);
+  ctx.fillStyle=css('--ink'); ctx.font='600 12px Segoe UI';
+  ctx.fillText('depth y (shared axis)',0,0); ctx.restore();
+
+  // panel frames + titles
+  ctx.strokeStyle=css('--line');
+  ctx.strokeRect(M.l, M.t, half, H-M.t-M.b);
+  ctx.strokeRect(M.l+half+M.mid, M.t, half, H-M.t-M.b);
+  ctx.font='600 12px Segoe UI';
+  ctx.fillStyle=css('--sup');
+  ctx.fillText('ENERGY IS LOST:  E₂ = E₁ − h_L', M.l+6, M.t-8);
+  ctx.fillStyle=css('--ok');
+  ctx.fillText('MOMENTUM IS CONSERVED:  M₁ = M₂', M.l+half+M.mid+6, M.t-8);
+  ctx.fillStyle=css('--dim'); ctx.font='11px Segoe UI';
+  ctx.fillText('specific energy E →', M.l+half-116, H-M.b+16);
+  ctx.fillText('specific force M = q²/gy + y²/2 →', M.l+half+M.mid+half-186, H-M.b+16);
+
+  // curves
+  const drawCurve=(fn,Xmap,xcap,color)=>{
+    ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath(); let s=false;
+    for(let y=ymax*0.012;y<=ymax;y+=ymax/400){
+      const v=fn(y); if(v>xcap){ s=false; continue; }
+      const p=[Xmap(v),Y(y)]; s?ctx.lineTo(...p):(ctx.moveTo(...p),s=true);
+    }
+    ctx.stroke();
+  };
+  drawCurve(y=>y+r.q*r.q/(2*G*y*y), XE, Emax, css('--accent'));
+  drawCurve(r.Mfun, XM, Mmax, css('--ok'));
+
+  // E–y panel: the two states and the h_L gap
+  const dot=(x,y,c)=>{ ctx.fillStyle=c; ctx.beginPath(); ctx.arc(x,Y(y),5,0,7); ctx.fill(); };
+  ctx.strokeStyle='#3f3f3f'; ctx.setLineDash([4,4]); ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(XE(r.E2),Y(r.y2)); ctx.lineTo(XE(r.E2),Y(ymax*0.03)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(XE(r.E1),Y(r.y1)); ctx.lineTo(XE(r.E1),Y(ymax*0.03)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle=css('--sup'); ctx.lineWidth=1.6;
+  const yb2=Y(ymax*0.03);
+  ctx.beginPath(); ctx.moveTo(XE(r.E2),yb2); ctx.lineTo(XE(r.E1),yb2); ctx.stroke();
+  ctx.fillStyle=css('--sup'); ctx.font='600 11.5px Segoe UI';
+  ctx.fillText(`h_L = ${(r.hL*1000).toFixed(1)} mm`, (XE(r.E1)+XE(r.E2))/2-34, yb2-6);
+  dot(XE(r.E1),r.y1,css('--sup')); dot(XE(r.E2),r.y2,css('--sub'));
+  ctx.fillStyle=css('--sup'); ctx.fillText('1', XE(r.E1)+8, Y(r.y1)+4);
+  ctx.fillStyle=css('--sub'); ctx.fillText('2', XE(r.E2)+8, Y(r.y2)+4);
+
+  // M–y panel: both states on ONE vertical line
+  ctx.strokeStyle=css('--ok'); ctx.setLineDash([6,4]); ctx.lineWidth=1.6;
+  ctx.beginPath(); ctx.moveTo(XM(r.M1),Y(r.y1)); ctx.lineTo(XM(r.M2),Y(r.y2)); ctx.stroke();
+  ctx.setLineDash([]);
+  dot(XM(r.M1),r.y1,css('--sup')); dot(XM(r.M2),r.y2,css('--sub'));
+  ctx.fillStyle=css('--sup'); ctx.fillText('1', XM(r.M1)+8, Y(r.y1)+4);
+  ctx.fillStyle=css('--sub'); ctx.fillText('2', XM(r.M2)+8, Y(r.y2)+4);
+  ctx.fillStyle=css('--ok');
+  ctx.fillText('sequent depths: same M', XM(r.M1)-70, Y((r.y1+r.y2)/2)+4);
+  // critical points (nose of each curve — both at y꜀)
+  ctx.fillStyle=css('--crit');
+  dot(XE(1.5*r.yc),r.yc,css('--crit')); dot(XM(r.Mfun(r.yc)),r.yc,css('--crit'));
+  ctx.fillText('E_min', XE(1.5*r.yc)-40, Y(r.yc)+4);
+  ctx.fillText('M_min', XM(r.Mfun(r.yc))+8, Y(r.yc)+14);
+}
+
+/* ---------------- main loop ---------------- */
+/* Pausing freezes the physics: foam, undular waves, particles and the sweep all
+   advance with simulation time simT, accumulated only while not paused. */
+let prev=performance.now(), sweepT=0, simT=0;
+function frame(now){
+  requestAnimationFrame(frame);
+  const dtReal=Math.min((now-prev)/1000,0.05); prev=now;
+  const dt=st.paused?0:dtReal;
+  simT+=dt;
+  if(st.sweep && !st.paused){
+    sweepT+=dt/14;
+    const lo=1.1, hi=frMax(st.y1), f=1-Math.abs(1-(sweepT%1)*2);
+    st.Fr=lo+(hi-lo)*f; $('s-Fr').value=st.Fr; syncChips();
+  }
+  const r=solve();
+  updateReadout(r);
+  drawFlume(r,simT,dt);
+  st.view==='diag' ? drawDiagrams(r) : drawChart(r);
+}
+requestAnimationFrame(frame);
+
+/* verification / telemetry hook */
+window.LAB = { state:st, solve, simT:()=>simT };
+</script>
+</body>
+</html>

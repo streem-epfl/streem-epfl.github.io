@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gradually Varied Flow — Water-Surface Profiles</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../assets/vendor/katex/katex.min.css">
+<script defer src="../../assets/vendor/katex/katex.min.js"></script>
+<script defer src="../../assets/scripts/streem-math.js"></script>
+<style>
+  :root{
+    --bg:#f5f5f5; --panel:#ffffff; --panel2:#f0f0f0; --ink:#1d1d1b; --dim:#5c5c5c;
+    --accent:#e30613; --sub:#006d9c; --crit:#9b5b00; --sup:#e30613; --line:#d6d6d6;
+    --ok:#08783f; --violet:#5c257e;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; overflow:hidden; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",system-ui,sans-serif;}
+  .panel{position:absolute; background:color-mix(in srgb, var(--panel) 92%, transparent);
+    border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+    backdrop-filter:blur(6px); font-size:13px; line-height:1.45; z-index:2;}
+  #ui{left:12px; top:12px; width:272px; max-height:calc(100% - 24px); overflow-y:auto;}
+  #readout{right:12px; top:12px; width:400px; max-height:calc(100% - 24px); overflow-y:auto;}
+  #actions{left:calc(298px + (100% - 724px)/2); transform:translateX(-50%); bottom:12px; display:flex;
+    gap:7px; padding:8px; flex-wrap:wrap; justify-content:center; max-width:calc(100% - 724px);}
+  #stage{position:absolute; inset:0; padding:12px 426px 100px 298px;
+    display:flex; flex-direction:column; gap:10px;}
+  #profWrap{flex:1.02; min-height:0; position:relative;}
+  #row2{flex:0.98; min-height:0; display:flex; gap:10px;}
+  #phaseWrap{flex:0.52; min-width:0; position:relative;}
+  #famWrap{flex:0.48; min-width:0; position:relative;}
+  canvas.view{width:100%; height:100%; display:block; background:var(--panel);
+    border:1px solid var(--line); border-radius:10px;}
+  h1{font-size:14px; margin-bottom:2px; color:var(--accent);}
+  .sub{color:var(--dim); font-size:11px; margin-bottom:10px;}
+  h2{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim);
+    margin:12px 0 6px; border-bottom:1px solid var(--line); padding-bottom:3px;}
+  label.row{display:flex; justify-content:space-between; align-items:center; margin:7px 0 2px;
+    font-size:12.5px;}
+  label.row .val{color:var(--accent); font-variant-numeric:tabular-nums; font-weight:600;}
+  input[type=range]{width:100%; accent-color:var(--accent);}
+  select{width:100%; background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:5px 6px; font-size:13px;}
+  .chk{display:flex; align-items:center; gap:7px; margin:5px 0; font-size:12.5px; cursor:pointer;}
+  .chk input{accent-color:var(--accent);}
+  button{background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    border-radius:7px; padding:7px 13px; font-size:12.5px; cursor:pointer;}
+  button:hover{border-color:var(--accent); color:var(--accent);}
+  button.active{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600;}
+  button.small{padding:5px 8px; font-size:12px; width:100%; margin-top:5px;}
+  .grid4{display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-top:6px;}
+  .grid4 button{padding:4px 0; font-size:11.5px;}
+  table.vals{width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums;}
+  table.vals td{padding:2.5px 0; font-size:12.5px;}
+  table.vals td:first-child{color:var(--dim);}
+  table.vals td:last-child{text-align:right; font-weight:600;}
+  .formula{font-family:Cambria,Georgia,serif; font-size:12.5px;
+    color:#353535; background:var(--panel2); border-radius:6px; padding:7px 9px; margin-top:6px;}
+  .formula .katex-display{margin:0; overflow-x:auto; overflow-y:hidden;}
+  .note{font-size:11px; color:var(--dim); margin-top:8px;}
+  #prof-chip{margin-top:8px; padding:8px 10px; border-radius:7px; text-align:center; font-weight:700;
+    font-size:14px; background:var(--sub); color:#fff;}
+  #chip{margin-top:6px; padding:5px 10px; border-radius:7px; text-align:center; font-weight:600;
+    font-size:12px; background:var(--panel2); border:1px solid var(--line); color:var(--ok);}
+  .hidden{display:none !important;}
+  @media (max-width:1150px){
+    html,body{overflow-y:auto; height:auto; min-height:100%;}
+    body{display:flex; flex-direction:column;}
+    .panel{position:static; width:auto; max-height:none; margin:10px 12px 0;}
+    #ui{order:1;} #stage{order:2; position:static; padding:10px 12px;}
+    #actions{order:3; align-self:center; transform:none; max-width:none;} #readout{order:4; margin-bottom:12px;}
+    #profWrap{flex:none; height:330px;}
+    #row2{flex:none; flex-direction:column; height:auto;}
+    #phaseWrap{flex:none; height:340px;} #famWrap{flex:none; height:320px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="ui" class="panel">
+  <h1>Gradually Varied Flow</h1>
+  <div class="sub">Water-surface profiles and the phase portrait of
+    <span data-tex="\frac{dy}{dx}=\frac{S_0-S_f}{1-\mathrm{Fr}^2}"></span>
+  </div>
+
+  <h2>Channel</h2>
+  <select id="shape">
+    <option value="rect" selected>Rectangular</option>
+    <option value="trap">Trapezoidal</option>
+    <option value="tri">Triangular</option>
+  </select>
+  <div id="ctl-b">
+    <label for="s-b" class="row">Bottom width <span data-tex="b"></span> <span class="val" id="v-b"></span></label>
+    <input type="range" id="s-b" min="0.5" max="60" step="0.1" value="5">
+  </div>
+  <div id="ctl-m" class="hidden">
+    <label for="s-m" class="row">Side slope <span data-tex="m\;(m\mathrm{H}:1\mathrm{V})"></span> <span class="val" id="v-m"></span></label>
+    <input type="range" id="s-m" min="0.25" max="3" step="0.05" value="1.5">
+  </div>
+  <label for="s-n" class="row">Manning <span data-tex="n"></span> <span class="val" id="v-n"></span></label>
+  <input type="range" id="s-n" min="0.010" max="0.045" step="0.001" value="0.015">
+  <div class="note">In SI units, <span data-tex="n=1/K_s"></span>, the inverse of the Strickler coefficient.</div>
+
+  <h2>Flow &amp; bed slope</h2>
+  <label for="s-Q" class="row">Discharge <span data-tex="Q"></span> (log scale) <span class="val" id="v-Q"></span></label>
+  <input type="range" id="s-Q" min="-0.7" max="2.6" step="0.001" value="1">
+  <label for="s-S0" class="row">Bed slope <span data-tex="S_0"></span> (signed log) <span class="val" id="v-S0"></span></label>
+  <input type="range" id="s-S0" min="-300" max="300" step="0.001" value="130.5">
+  <div class="note" style="margin-top:2px">Centre = 0 (horizontal, H); left of centre =
+  adverse (A). Both have no normal depth.</div>
+  <button id="b-sweepS" class="small">▶ Sweep <span data-tex="S_0"></span> (adverse → mild → steep)</button>
+
+  <h2>Control section</h2>
+  <label for="s-y0" class="row">Control depth <span data-tex="y_0"></span> <span class="val" id="v-y0"></span></label>
+  <input type="range" id="s-y0" min="0.02" max="10" step="0.01" value="1.8">
+  <div class="note" id="ctrlNote"></div>
+
+  <h2>Jump to a profile type</h2>
+  <div class="grid4">
+    <button data-fam="M1">M1</button><button data-fam="M2">M2</button>
+    <button data-fam="M3">M3</button><button data-fam="S1">S1</button>
+    <button data-fam="S2">S2</button><button data-fam="S3">S3</button>
+    <button data-fam="C1">C1</button><button data-fam="C3">C3</button>
+    <button data-fam="H2">H2</button><button data-fam="H3">H3</button>
+    <button data-fam="A2">A2</button><button data-fam="A3">A3</button>
+  </div>
+  <div class="note" style="margin-top:5px">Same channel (<span data-tex="b=5\ \mathrm{m},\ n=0.015,\ Q=10\ \mathrm{m^3/s}"></span>)
+  every time — only the bed slope and the control depth change.</div>
+
+  <h2>Direct-step method</h2>
+  <label for="s-N" class="row">Number of steps <span data-tex="N"></span> <span class="val" id="v-N"></span></label>
+  <input type="range" id="s-N" min="0" max="7" step="1" value="2">
+  <label class="chk"><input type="checkbox" id="t-step" checked> Show the direct-step staircase</label>
+
+  <h2>Show</h2>
+  <label class="chk"><input type="checkbox" id="t-part" checked> Water particles (local <span data-tex="V=Q/A"></span>)</label>
+  <label class="chk"><input type="checkbox" id="t-zones" checked> Zone shading (1 / 2 / 3)</label>
+  <label class="chk"><input type="checkbox" id="t-egl" checked> Energy grade line <span data-tex="y+V^2/(2g)"></span></label>
+  <label class="chk"><input type="checkbox" id="t-chars"> Wave speeds <span data-tex="V\pm\sqrt{gD}"></span></label>
+
+  <div class="note"><b>Aha demo:</b> press <i>March from the control</i>. The probe integrates
+  the profile away from the control section while the same point rides the <span data-tex="dy/dx"></span> curve on the
+  right: watch it slide toward the <b>zero</b> of the numerator (the NDL — every profile is
+  attracted to <span data-tex="y_n"></span>) or toward the <b>pole</b> of the denominator (the CDL — where <span data-tex="dy/dx"></span> becomes unbounded
+  and GVF theory no longer applies, so a jump or a free overfall takes over). Then press <i>Sweep <span data-tex="S_0"></span></i>:
+  the zero and the pole swap places as <span data-tex="y_n"></span> crosses <span data-tex="y_c"></span>, and the whole family changes M → C → S.</div>
+</div>
+
+<div id="readout" class="panel">
+  <h2 style="margin-top:0">Classification</h2>
+  <table class="vals">
+    <tr><td>Normal depth <span data-tex="(y_n)"></span> · NDL</td><td id="o-yn"></td></tr>
+    <tr><td>Critical depth <span data-tex="(y_c)"></span> · CDL</td><td id="o-yc"></td></tr>
+    <tr><td>Critical slope <span data-tex="(S_c)"></span></td><td id="o-Sc"></td></tr>
+    <tr><td>Slope class</td><td id="o-slope"></td></tr>
+    <tr><td>Zone of <span data-tex="y_0"></span></td><td id="o-zone"></td></tr>
+  </table>
+  <div id="prof-chip">M1 — BACKWATER</div>
+  <div id="chip">READY</div>
+  <div class="note" id="o-desc" style="margin-top:7px"></div>
+
+  <h2>The equation at the control</h2>
+  <table class="vals">
+    <tr><td>Froude number <span data-tex="\mathrm{Fr}(y_0)"></span></td><td id="o-Fr"></td></tr>
+    <tr><td>Friction slope <span data-tex="S_f(y_0)"></span></td><td id="o-Sf"></td></tr>
+    <tr><td>Numerator <span data-tex="S_0-S_f"></span></td><td id="o-num"></td></tr>
+    <tr><td>Denominator <span data-tex="1-\mathrm{Fr}^2"></span></td><td id="o-den"></td></tr>
+    <tr><td><span data-tex="dy/dx"></span></td><td id="o-dydx"></td></tr>
+    <tr><td>Control acts from</td><td id="o-ctrl"></td></tr>
+  </table>
+
+  <h2>Integrated profile (RK4)</h2>
+  <table class="vals">
+    <tr><td>Reach length to 1% of <span data-tex="y_n"></span></td><td id="o-len"></td></tr>
+    <tr><td>End condition</td><td id="o-end"></td></tr>
+    <tr><td>Particle time compression</td><td id="o-tc"></td></tr>
+  </table>
+
+  <h2>Direct step (quantitative)</h2>
+  <table class="vals">
+    <tr><td>Single step <span data-tex="y_0\rightarrow y_n"></span> (classic)</td><td id="o-ds1"></td></tr>
+    <tr><td id="o-dsNlab">N-step over the same range</td><td id="o-dsN"></td></tr>
+    <tr><td>N-step ÷ RK4 length</td><td id="o-dsconv"></td></tr>
+  </table>
+
+  <h2>Self-checks</h2>
+  <table class="vals">
+    <tr><td><span data-tex="S_f(y_n)/S_0"></span></td><td id="o-nchk"></td></tr>
+    <tr><td><span data-tex="\mathrm{Fr}(y_c)"></span></td><td id="o-cchk"></td></tr>
+    <tr><td><span data-tex="\int(S_0-S_f)\,dx/\Delta E"></span></td><td id="o-echk"></td></tr>
+  </table>
+  <div class="formula" data-tex-display="block" data-tex="\begin{aligned}
+    \frac{dy}{dx}&amp;=\frac{S_0-S_f}{1-\mathrm{Fr}^2}\\
+    S_f&amp;=\left(\frac{nQ}{AR^{2/3}}\right)^2,\qquad
+    \mathrm{Fr}^2=\frac{Q^2T}{gA^3}\\
+    E&amp;=y+\frac{Q^2}{2gA^2}\\
+    S_0-S_f=0&amp;\Longrightarrow y=y_n\quad(\mathrm{NDL})\\
+    1-\mathrm{Fr}^2=0&amp;\Longrightarrow y=y_c\quad(\mathrm{CDL})\\
+    \Delta x&amp;=\frac{E_2-E_1}{S_0-\overline{S_f}}
+  \end{aligned}"></div>
+  <div class="note">Subcritical flow (<span data-tex="y&gt;y_c"></span>) carries information upstream, so its control
+  sits <b>downstream</b> and the profile is integrated upstream from it; supercritical flow is
+  controlled from <b>upstream</b>. The profile flattens onto the NDL asymptotically and meets
+  the CDL vertically — there the gradually-varied assumption fails and a jump, a gate or an
+  overfall takes over.</div>
+</div>
+
+<div id="stage">
+  <div id="profWrap"><canvas id="prof" class="view"></canvas></div>
+  <div id="row2">
+    <div id="phaseWrap"><canvas id="phase" class="view"></canvas></div>
+    <div id="famWrap"><canvas id="fam" class="view"></canvas></div>
+  </div>
+</div>
+
+<div id="actions" class="panel">
+  <button id="b-pause">⏸ Pause</button>
+  <button id="b-march">▶ March from the control</button>
+  <button id="b-sweepY">▶ Sweep y₀ (zones 3 → 2 → 1)</button>
+  <button id="b-ex1">Worked example — S1</button>
+  <button id="b-ex2">Worked example — M1 backwater</button>
+</div>
+
+<script>
+'use strict';
+/* =================== physics =================== */
+const G=9.81;
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const NSTEPS=[1,2,5,10,25,50,100,250];
+
+const st={shape:'rect', b:5, m:1.5, n:0.015, logQ:1, u:130.5, y0:1.8, nIdx:2,
+  part:true, zones:true, egl:true, chars:false, step:true,
+  sweepY:false, sweepS:false, paused:false};
+
+const S0v=u=>Math.abs(u)<0.5?0:Math.sign(u)*Math.pow(10,-4.3+0.01*(Math.abs(u)-0.5));
+const uOf=S=>S===0?0:Math.sign(S)*(0.5+100*(Math.log10(Math.abs(S))+4.3));
+const S0=()=>S0v(st.u);
+const Qv=()=>Math.pow(10,st.logQ);
+
+function geom(y){
+  const {b,m}=st;
+  if(st.shape==='rect') return {A:b*y, P:b+2*y, T:b};
+  if(st.shape==='tri')  return {A:m*y*y, P:2*y*Math.sqrt(1+m*m), T:2*m*y};
+  return {A:(b+m*y)*y, P:b+2*y*Math.sqrt(1+m*m), T:b+2*m*y};
+}
+const Sf=y=>{ const g=geom(y), R=g.A/g.P;
+  return Math.pow(st.n*Qv()/(g.A*Math.pow(R,2/3)),2); };
+const Fr2=y=>{ const g=geom(y); return Qv()*Qv()*g.T/(G*Math.pow(g.A,3)); };
+const Ehead=y=>{ const g=geom(y); return y+Qv()*Qv()/(2*G*g.A*g.A); };
+const Vel=y=>Qv()/geom(y).A;
+const dydx=y=>{ const den=1-Fr2(y); return (S0()-Sf(y))/den; };
+
+function normalDepth(){                       // no NDL on horizontal / adverse beds
+  const s=S0(); if(s<=0) return Infinity;
+  const QQ=y=>{ const g=geom(y), R=g.A/g.P;
+    return g.A*Math.pow(R,2/3)*Math.sqrt(s)/st.n; };
+  let lo=1e-5, hi=60;
+  for(let i=0;i<80;i++){ const md=(lo+hi)/2; (QQ(md)<Qv())?lo=md:hi=md; }
+  return (lo+hi)/2;
+}
+function criticalDepth(){                      // Q²T/(gA³) = 1, decreasing in y
+  let lo=1e-5, hi=60;
+  for(let i=0;i<80;i++){ const md=(lo+hi)/2; (Fr2(md)>1)?lo=md:hi=md; }
+  return (lo+hi)/2;
+}
+function criticalSlope(yc){ const g=geom(yc), R=g.A/g.P;
+  return Math.pow(st.n*Qv()/(g.A*Math.pow(R,2/3)),2); }
+
+function classify(yn,yc,y){
+  const s=S0(); let sc,L;
+  if(s<0){ sc='A (adverse)'; L='A'; }
+  else if(s===0){ sc='H (horizontal)'; L='H'; }
+  else if(Math.abs(yn-yc)/yc<0.02){ sc='C (critical)'; L='C'; }
+  else if(yn>yc){ sc='M (mild)'; L='M'; }
+  else { sc='S (steep)'; L='S'; }
+  let zone,name;
+  if(L==='H'||L==='A'){ zone=y>yc?'Zone 2':'Zone 3'; name=L+(y>yc?'2':'3'); }
+  else if(L==='C'){ zone=y>yc?'Zone 1':'Zone 3'; name='C'+(y>yc?'1':'3'); }
+  else{
+    const hi=Math.max(yn,yc), lo=Math.min(yn,yc);
+    if(Math.abs(y-yn)/yn<0.005){ zone='normal depth'; name='UNIFORM FLOW'; }
+    else if(y>hi){ zone='Zone 1'; name=L+'1'; }
+    else if(y<lo){ zone='Zone 3'; name=L+'3'; }
+    else { zone='Zone 2'; name=L+'2'; }
+  }
+  return {sc,L,zone,name};
+}
+const DESC={
+  M1:'M1 — backwater behind a dam, weir or check structure on a mild bed.',
+  M2:'M2 — drawdown as a mild reach approaches a free overfall or a steepening bed.',
+  M3:'M3 — supercritical jet under a sluice gate on a mild bed; it ends in a hydraulic jump.',
+  S1:'S1 — backwater behind an obstruction on a steep bed; it begins at a hydraulic jump.',
+  S2:'S2 — short drawdown where a mild reach steepens; the depth falls toward normal depth.',
+  S3:'S3 — flow issuing from a gate on a steep bed, rising toward normal depth.',
+  C1:'C1 — near-horizontal surface on a critical bed, where normal and critical depths coincide.',
+  C3:'C3 — near-horizontal surface below the critical line on a critical bed.',
+  H2:'H2 — drawdown to a free overfall on a horizontal bed; no normal depth exists.',
+  H3:'H3 — jet from a gate on a horizontal bed, rising to critical.',
+  A2:'A2 — drawdown to an overfall on an adverse (upward) bed; gravity opposes the flow.',
+  A3:'A3 — jet from a gate on an adverse bed, rising to critical.',
+  'UNIFORM FLOW':'The control depth equals the normal depth. The surface is parallel to the bed and GVF degenerates to uniform flow.'
+};
+
+/* ---- RK4 integration of dy/dx away from the control section ----
+   s = distance marched from the control (always ≥ 0).
+   Subcritical control (y₀ > y꜀) → information travels upstream → march upstream,
+   so dx = −ds and dy/ds = −dy/dx. Supercritical → march downstream, dy/ds = +dy/dx.  */
+function integrate(yn,yc,y0){
+  const s0=S0();
+  const sub=y0>yc, sgn=sub?-1:1;
+  let y=y0;
+  if(Math.abs(y-yc)/yc<0.01) y=yc*(sub?1.012:0.988);
+  const yStart=y;
+  const f=yy=>sgn*dydx(yy);
+  const pts=[[0,y]]; let x=0, len=0, Ix=0, note='', hit='';
+  const scale=Math.max(yc, isFinite(yn)?yn:yc, y0);
+  for(let i=0;i<40000;i++){
+    if(Math.abs(1-Fr2(y))<1.5e-3||Math.abs(y-yc)/yc<0.004){
+      note='meets the CDL vertically — GVF invalid'; hit='crit'; break; }
+    const d=dydx(y);
+    if(!isFinite(d)){ note='meets the CDL vertically — GVF invalid'; hit='crit'; break; }
+    let ds=clamp(0.0012*Math.max(y,0.03)/Math.max(Math.abs(d),1e-10), 0.02, 400);
+    // never advance more than 5 % of the remaining distance to the pole at y꜀,
+    // otherwise the step overshoots where dy/dx is steepening without bound
+    ds=Math.min(ds, 0.05*Math.abs(y-yc)/Math.max(Math.abs(d),1e-10));
+    const k1=f(y);
+    const g2=Math.max(y+ds*k1/2,1e-3), k2=f(g2);
+    const g3=Math.max(y+ds*k2/2,1e-3), k3=f(g3);
+    const g4=Math.max(y+ds*k3,1e-3),   k4=f(g4);
+    const yn2=y+ds/6*(k1+2*k2+2*k3+k4);
+    if(!isFinite(yn2)){ note='meets the CDL vertically — GVF invalid'; hit='crit'; break; }
+    if((y-yc)*(yn2-yc)<0){ note='meets the CDL vertically — GVF invalid'; hit='crit'; break; }
+    const dx=sgn*ds;
+    Ix += ((s0-Sf(y))+(s0-Sf(yn2)))/2*dx;      // ∫(S₀−S_f)dx, x positive downstream
+    y=yn2; len+=ds; x+=dx; pts.push([x,y]);
+    if(y<=0.012){ note='depth → 0'; hit='zero'; break; }
+    if(isFinite(yn)&&Math.abs(y-yn)/yn<=0.01){ note='approaches the NDL asymptotically (within 1 %)'; hit='ndl'; break; }
+    if(y>9*scale){ note='(truncated — surface still rising)'; hit='cut'; break; }
+    if(len>4000*scale||len>60000){ note='(truncated — the profile extends further)'; hit='cut'; break; }
+  }
+  const yEnd=y;
+  if(sub) pts.reverse();                       // left → right = upstream → downstream
+  const x0=pts[0][0];
+  const prof=pts.map(p=>[p[0]-x0,p[1]]);
+  const dE=Ehead(yEnd)-Ehead(yStart);
+  return {prof, L:Math.max(prof[prof.length-1][0],1e-6), sub, note, hit,
+    yStart, yEnd, Ix, dE, eRatio:Math.abs(dE)>1e-9?Ix/dE:NaN};
+}
+
+/* ---- direct step: Δx = (E₂ − E₁)/(S₀ − S̄_f), N equal depth increments ---- */
+function directStep(yA,yB,N){
+  const s0=S0(); let L=0, y1=yA, ok=true;
+  const pts=[[0,yA]];
+  const dy=(yB-yA)/N;
+  for(let i=0;i<N;i++){
+    const y2=yA+dy*(i+1);
+    const sbar=s0-(Sf(y1)+Sf(y2))/2;
+    if(Math.abs(sbar)<1e-11){ ok=false; break; }
+    L+=(Ehead(y2)-Ehead(y1))/sbar;
+    pts.push([L,y2]); y1=y2;
+  }
+  return {L, pts, ok};
+}
+
+function solve(){
+  const yn=normalDepth(), yc=criticalDepth();
+  const cls=classify(yn,yc,st.y0);
+  const it=integrate(yn,yc,st.y0);
+  const N=NSTEPS[st.nIdx];
+  const ds=directStep(it.yStart,it.yEnd,N);
+  let ds1=null;                                 // the classic single step y₀ → yₙ
+  if(isFinite(yn)&&Math.abs(st.y0-yn)/yn>0.01){
+    const r1=directStep(st.y0,yn,1); if(r1.ok) ds1=Math.abs(r1.L);
+  }
+  return {yn, yc, cls, Sc:criticalSlope(yc), N, ds, ds1,
+    Fr0:Math.sqrt(Fr2(st.y0)), Sf0:Sf(st.y0), num:S0()-Sf(st.y0),
+    den:1-Fr2(st.y0), d0:dydx(st.y0), ...it};
+}
+
+/* =================== UI =================== */
+const $=id=>document.getElementById(id);
+const fS=s=>s===0?'0 (horizontal)':Math.abs(s)<0.001?s.toExponential(2):s.toFixed(4);
+const fL=m=>Math.abs(m)>2000?(m/1000).toFixed(2)+' km':m.toFixed(0)+' m';
+const fT=s=>s<90?s.toFixed(0)+' s':s<5400?(s/60).toFixed(1)+' min':(s/3600).toFixed(1)+' h';
+
+function syncChips(){
+  $('v-b').textContent=st.b.toFixed(1)+' m';
+  $('v-m').textContent=st.m.toFixed(2);
+  $('v-n').textContent=st.n.toFixed(3);
+  $('v-Q').textContent=Qv().toFixed(Qv()<10?2:1)+' m³/s';
+  $('v-S0').textContent=fS(S0());
+  $('v-y0').textContent=st.y0.toFixed(2)+' m';
+  $('v-N').textContent=NSTEPS[st.nIdx];
+}
+function stopAnims(){ mar.on=false; mar.p=0; }
+const bindS=(id,k,f)=>$(id).addEventListener('input',e=>{
+  st[k]=parseFloat(e.target.value); f&&f(); dirty=true; stopAnims(); syncChips(); });
+bindS('s-b','b'); bindS('s-m','m'); bindS('s-n','n');
+bindS('s-Q','logQ'); bindS('s-S0','u'); bindS('s-y0','y0');
+$('s-N').addEventListener('input',e=>{ st.nIdx=parseInt(e.target.value); syncChips(); });
+$('shape').addEventListener('change',e=>{ st.shape=e.target.value;
+  $('ctl-b').classList.toggle('hidden',st.shape==='tri');
+  $('ctl-m').classList.toggle('hidden',st.shape==='rect');
+  dirty=true; stopAnims(); syncChips(); });
+$('t-part').addEventListener('change',e=>st.part=e.target.checked);
+$('t-zones').addEventListener('change',e=>st.zones=e.target.checked);
+$('t-egl').addEventListener('change',e=>st.egl=e.target.checked);
+$('t-chars').addEventListener('change',e=>st.chars=e.target.checked);
+$('t-step').addEventListener('change',e=>st.step=e.target.checked);
+
+function applyPreset(p){
+  Object.assign(st,p); st.sweepY=false; st.sweepS=false; stopAnims(); dirty=true;
+  $('shape').value=st.shape;
+  $('ctl-b').classList.toggle('hidden',st.shape==='tri');
+  $('ctl-m').classList.toggle('hidden',st.shape==='rect');
+  $('s-b').value=st.b; $('s-m').value=st.m; $('s-n').value=st.n;
+  $('s-Q').value=st.logQ; $('s-S0').value=st.u; $('s-y0').value=st.y0;
+  $('b-sweepY').classList.remove('active'); $('b-sweepS').classList.remove('active');
+  syncChips();
+}
+/* one channel, twelve profiles: b = 5 m, n = 0.015, Q = 10 m³/s (y꜀ = 0.742 m) */
+const FAM={
+  M1:[0.001,1.80], M2:[0.001,0.90], M3:[0.001,0.35],
+  S1:[0.020,1.20], S2:[0.020,0.60], S3:[0.020,0.25],
+  C1:[0.0034478,1.10], C3:[0.0034478,0.50],
+  H2:[0,1.20], H3:[0,0.35],
+  A2:[-0.0005,1.20], A3:[-0.0005,0.35]
+};
+document.querySelectorAll('[data-fam]').forEach(btn=>btn.onclick=()=>{
+  const [S,y]=FAM[btn.dataset.fam];
+  applyPreset({shape:'rect', b:5, m:1.5, n:0.015, logQ:1, u:uOf(S), y0:y});
+});
+$('b-ex1').onclick=()=>applyPreset({shape:'rect', b:2, m:1.5, n:0.014,
+  logQ:Math.log10(0.75), u:uOf(0.035), y0:1.25});
+$('b-ex2').onclick=()=>applyPreset({shape:'rect', b:50, m:1.5, n:0.03,
+  logQ:Math.log10(112.63), u:uOf(0.0005), y0:3.5});
+$('b-sweepY').onclick=()=>{ st.sweepY=!st.sweepY; st.sweepS=false; stopAnims();
+  $('b-sweepS').classList.remove('active');
+  $('b-sweepY').classList.toggle('active',st.sweepY); };
+$('b-sweepS').onclick=()=>{ st.sweepS=!st.sweepS; st.sweepY=false; stopAnims(); dirty=true;
+  $('b-sweepY').classList.remove('active');
+  $('b-sweepS').classList.toggle('active',st.sweepS); };
+$('b-pause').onclick=()=>{ st.paused=!st.paused;
+  $('b-pause').classList.toggle('active',st.paused);
+  $('b-pause').textContent=st.paused?'▶ Resume':'⏸ Pause'; };
+
+const mar={on:false, p:0, T:16};               // march: p = fraction traced from the control
+$('b-march').onclick=()=>{ mar.on=true; mar.p=0; st.sweepY=false; st.sweepS=false;
+  $('b-sweepY').classList.remove('active'); $('b-sweepS').classList.remove('active'); };
+syncChips();
+
+function updateReadout(r,tc){
+  $('o-yn').textContent=isFinite(r.yn)?r.yn.toFixed(3)+' m':'∞ — none (H / A bed)';
+  $('o-yc').textContent=r.yc.toFixed(3)+' m';
+  $('o-Sc').textContent=fS(r.Sc).replace(' (horizontal)','');
+  $('o-slope').textContent=r.cls.sc;
+  $('o-zone').textContent=r.cls.zone;
+  $('o-Fr').textContent=r.Fr0.toFixed(3)+(r.Fr0<1?'  (subcritical)':'  (supercritical)');
+  $('o-Sf').textContent=r.Sf0.toExponential(2);
+  $('o-num').textContent=r.num.toExponential(2);
+  $('o-den').textContent=r.den.toFixed(3);
+  $('o-dydx').textContent=Math.abs(r.den)<2e-3?'→ ∞  (Fr ≈ 1)':r.d0.toExponential(2)
+    +(r.d0>0?'  ↗':'  ↘');
+  $('o-ctrl').textContent=r.sub?'downstream (subcritical)':'upstream (supercritical)';
+  $('o-len').textContent=fL(r.L);
+  $('o-end').textContent=r.note||'—';
+  $('o-tc').textContent=tc;
+  $('o-ds1').textContent=r.ds1?fL(r.ds1):'—';
+  $('o-dsNlab').textContent='N = '+r.N+' steps to '+r.yEnd.toFixed(3)+' m';
+  $('o-dsN').textContent=r.ds.ok?fL(Math.abs(r.ds.L)):'diverges (S₀ = S̄_f)';
+  const cv=r.ds.ok&&r.L>1?Math.abs(r.ds.L)/r.L:NaN;
+  $('o-dsconv').textContent=isFinite(cv)?cv.toFixed(3)+(Math.abs(cv-1)<0.02?' ✓':''):'—';
+  $('o-dsconv').style.color=isFinite(cv)&&Math.abs(cv-1)<0.02?'var(--ok)':'var(--crit)';
+  if(isFinite(r.yn)){
+    const rat=Sf(r.yn)/S0();
+    $('o-nchk').textContent=rat.toFixed(4)+(Math.abs(rat-1)<2e-3?' ✓':' ✗');
+    $('o-nchk').style.color=Math.abs(rat-1)<2e-3?'var(--ok)':'var(--sup)';
+  } else { $('o-nchk').textContent='— (no normal depth)'; $('o-nchk').style.color='var(--dim)'; }
+  const frc=Math.sqrt(Fr2(r.yc));
+  $('o-cchk').textContent=frc.toFixed(4)+(Math.abs(frc-1)<2e-3?' ✓':' ✗');
+  $('o-cchk').style.color=Math.abs(frc-1)<2e-3?'var(--ok)':'var(--sup)';
+  const er=r.eRatio;
+  $('o-echk').textContent=isFinite(er)?er.toFixed(4)+(Math.abs(er-1)<3e-3?' ✓':' ✗'):'—';
+  $('o-echk').style.color=isFinite(er)&&Math.abs(er-1)<3e-3?'var(--ok)':'var(--crit)';
+  $('ctrlNote').textContent=r.sub
+    ? 'Subcritical control: the control acts from downstream — a dam, weir or check gate.'
+    : 'Supercritical control: the control acts from upstream — a sluice gate or a steep entry.';
+  $('o-desc').textContent=DESC[r.cls.name]||'';
+  const chip=$('prof-chip');
+  const trend=r.cls.name==='UNIFORM FLOW'?'':Math.abs(r.den)<2e-3?'':
+    (r.d0>0?' — BACKWATER (dy/dx > 0)':' — DRAWDOWN (dy/dx < 0)');
+  chip.textContent=r.cls.name+trend;
+  const zc=r.cls.name==='UNIFORM FLOW'?'--ok':
+    r.cls.zone==='Zone 1'?'--sub':r.cls.zone==='Zone 2'?'--ok':'--sup';
+  chip.style.background=`var(${zc})`;
+  chip.style.color='#fff';
+  const s=$('chip');
+  if(st.paused){ s.textContent='PAUSED — physics frozen'; s.style.color='var(--crit)'; }
+  else if(mar.on&&mar.p<1){ s.textContent='MARCHING from the control — '
+    +(mar.p*100).toFixed(0)+' % of the reach'; s.style.color='var(--accent)'; }
+  else if(mar.on){ s.textContent='MARCH complete — '+(r.note||'end of reach');
+    s.style.color='var(--ok)'; }
+  else if(st.sweepY){ s.textContent='SWEEPING y₀'; s.style.color='var(--accent)'; }
+  else if(st.sweepS){ s.textContent='SWEEPING S₀'; s.style.color='var(--accent)'; }
+  else { s.textContent='READY'; s.style.color='var(--ok)'; }
+}
+
+/* =================== canvas helpers =================== */
+function fitCanvas(cv){
+  const dpr=Math.min(devicePixelRatio,2), w=cv.clientWidth, h=cv.clientHeight;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){ cv.width=w*dpr; cv.height=h*dpr; }
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); return [ctx,w,h];
+}
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+/* Boxed text with automatic two-dimensional collision avoidance. */
+function mkLabel(ctx,W,H,M){
+  const boxes=[];
+  const overlaps=(a,b,gap=4)=>a.x<b.x+b.w+gap&&a.x+a.w+gap>b.x&&a.y<b.y+b.h+gap&&a.y+a.h+gap>b.y;
+  return (txt,x,y)=>{
+    ctx.font='600 12.5px Segoe UI';
+    const padX=5,w=ctx.measureText(txt).width+2*padX,h=21;
+    const make=(px,py)=>({x:clamp(px,M.l+2,Math.max(M.l+2,W-M.r-w-2)),y:clamp(py,8,H-h-6),w,h});
+    const first=make(x,y-15),candidates=[first],stepX=Math.min(w+7,Math.max(55,W*.13)),stepY=h+6;
+    for(let ring=1;ring<=10;ring++){
+      candidates.push(make(x,y-15-ring*stepY),make(x,y-15+ring*stepY),make(x-ring*stepX,y-15),make(x+ring*stepX,y-15));
+      candidates.push(make(x-ring*stepX,y-15-ring*stepY),make(x+ring*stepX,y-15-ring*stepY),make(x-ring*stepX,y-15+ring*stepY),make(x+ring*stepX,y-15+ring*stepY));
+    }
+    const seen=new Set();let box=null;
+    for(const candidate of candidates){const key=`${candidate.x.toFixed(1)},${candidate.y.toFixed(1)}`;if(seen.has(key))continue;seen.add(key);if(!boxes.some(other=>overlaps(candidate,other))){box=candidate;break;}}
+    if(!box){let bestDistance=Infinity;for(let yy=8;yy<=H-h-6;yy+=h+5)for(let xx=M.l+2;xx<=W-M.r-w-2;xx+=12){const candidate={x:xx,y:yy,w,h};if(boxes.some(other=>overlaps(candidate,other)))continue;const distance=Math.hypot(xx-first.x,yy-first.y);if(distance<bestDistance){box=candidate;bestDistance=distance;}}}
+    box=box||first;
+    boxes.push(box);ctx.beginPath();ctx.roundRect(box.x,box.y,w,h,5);ctx.fillStyle='rgba(255,255,255,.96)';ctx.fill();ctx.strokeStyle=css('--ink');ctx.lineWidth=1;ctx.stroke();
+    ctx.fillStyle=css('--ink');ctx.textBaseline='middle';ctx.fillText(txt,box.x+padX,box.y+h/2);ctx.textBaseline='alphabetic';
+  };
+}
+function arrow(ctx,x1,y1,x2,y2,color,w){
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=w;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  const a=Math.atan2(y2-y1,x2-x1), s=5+w;
+  ctx.beginPath(); ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-s*Math.cos(a-0.45),y2-s*Math.sin(a-0.45));
+  ctx.lineTo(x2-s*Math.cos(a+0.45),y2-s*Math.sin(a+0.45));
+  ctx.closePath(); ctx.fill();
+}
+function tri(ctx,x,y,dir,color,s){
+  ctx.fillStyle=color; ctx.beginPath();
+  ctx.moveTo(x,y-dir*s); ctx.lineTo(x-s*0.72,y+dir*s*0.6); ctx.lineTo(x+s*0.72,y+dir*s*0.6);
+  ctx.closePath(); ctx.fill();
+}
+
+/* =================== longitudinal profile =================== */
+const NS=600, depth=new Float32Array(NS+1);
+const NPART=110, pxi=new Float32Array(NPART), pfr=new Float32Array(NPART);
+for(let i=0;i<NPART;i++){ pxi[i]=Math.random(); pfr[i]=0.12+0.76*Math.random(); }
+let lastTC='—';
+
+function resample(r){
+  let j=0;
+  for(let i=0;i<=NS;i++){
+    const xx=i/NS*r.L;
+    while(j<r.prof.length-2 && r.prof[j+1][0]<xx) j++;
+    const a=r.prof[j], b=r.prof[Math.min(j+1,r.prof.length-1)];
+    depth[i]= b[0]>a[0] ? a[1]+(b[1]-a[1])*(xx-a[0])/(b[0]-a[0]) : a[1];
+  }
+}
+function drawProfile(r,dt){
+  const [ctx,W,H]=fitCanvas($('prof'));
+  ctx.clearRect(0,0,W,H);
+  const M={l:16,r:16,t:34,b:56}, PW=W-M.l-M.r, PH=H-M.t-M.b;
+  resample(r);
+  const s0=S0(), L=r.L;
+  // the panel is anchored on the control section, and is widened if the direct-step
+  // staircase reaches further than the integrated profile does
+  const Lp=Math.max(L, st.step&&r.ds.ok?Math.abs(r.ds.L):0);
+  const xOf=dist=>r.sub?1-dist/Lp:dist/Lp;     // dist = distance from the control section
+
+  // vertical scale from the depths; the energy line is included only up to 1.35× the
+  // depth range, so a supercritical jet's large velocity head cannot crush the water
+  // body out of sight (the EGL then runs off the top; its value is in the readout)
+  let dTop=0, eTop=0;
+  for(let i=0;i<=NS;i++){ const d=depth[i];
+    dTop=Math.max(dTop,d); eTop=Math.max(eTop, d+Qv()*Qv()/(2*G*Math.pow(geom(d).A,2))); }
+  const base=Math.max(dTop, isFinite(r.yn)?r.yn:0, r.yc);
+  let ymax=(st.egl?Math.max(base,Math.min(eTop,1.35*base)):base)*1.14+0.03;
+  const sy=PH*0.62/ymax, sx=PW/Lp;
+  const trueDrop=s0*Lp;
+  let dd=0;
+  if(s0!==0) dd=Math.sign(s0)*clamp(Math.abs(trueDrop)*sy, PH*0.06, PH*0.22);
+  const Y0=H-M.b-Math.max(0,-dd)-2;            // pixel of the downstream bed point
+  const bedPx=xi=>Y0-(1-xi)*dd;
+  const X=xi=>M.l+xi*PW;
+  const Ypx=(xi,d)=>bedPx(xi)-d*sy;
+  const label=mkLabel(ctx,W,H,M);
+
+  ctx.font='12px Segoe UI'; ctx.fillStyle=css('--dim');
+  const hdrLong=`Longitudinal profile — reach ${fL(Lp)}, flow left → right; depths and depth `
+    +`lines true to the vertical scale (×${(sy/sx).toFixed(0)} vs horizontal)`;
+  const hdrShort=`Reach ${fL(Lp)} · flow left → right · depths to scale (vertical ×`
+    +`${(sy/sx).toFixed(0)})`;
+  ctx.fillText(ctx.measureText(hdrLong).width<PW?hdrLong:hdrShort, M.l, 15);
+
+  // everything geometric is clipped to the plot area (a supercritical energy line can
+  // sit far above the water surface and would otherwise run over the header)
+  ctx.save(); ctx.beginPath(); ctx.rect(M.l,M.t,PW,PH); ctx.clip();
+
+  // zone shading between the parallel NDL / CDL / bed lines
+  const zHi=isFinite(r.yn)?Math.max(r.yn,r.yc):ymax, zLo=isFinite(r.yn)?Math.min(r.yn,r.yc):r.yc;
+  if(st.zones){
+    const band=(d1,d2,color)=>{ ctx.fillStyle=color; ctx.beginPath();
+      ctx.moveTo(X(0),Ypx(0,d1)); ctx.lineTo(X(1),Ypx(1,d1));
+      ctx.lineTo(X(1),Ypx(1,d2)); ctx.lineTo(X(0),Ypx(0,d2));
+      ctx.closePath(); ctx.fill(); };
+    band(zHi,ymax,'rgba(0,109,156,.07)'); band(zLo,zHi,'rgba(8,120,63,.07)'); band(0,zLo,'rgba(227,6,19,.06)');
+  }
+
+  // marched portion only, while the march is running (i is an index along the profile,
+  // measured from the upstream end; XI(i) maps it onto the control-anchored panel)
+  const p=mar.on?mar.p:1;
+  const i0=r.sub?Math.round((1-p)*NS):0, i1=r.sub?NS:Math.round(p*NS);
+  const XI=i=>xOf(r.sub?L*(1-i/NS):L*i/NS);
+
+  // water body
+  ctx.beginPath(); ctx.moveTo(X(XI(i0)),Ypx(XI(i0),0));
+  for(let i=i0;i<=i1;i++) ctx.lineTo(X(XI(i)),Ypx(XI(i),depth[i]));
+  ctx.lineTo(X(XI(i1)),Ypx(XI(i1),0)); ctx.closePath();
+  ctx.fillStyle='rgba(143,211,235,.62)'; ctx.fill();
+  // free surface
+  ctx.strokeStyle='#006d9c'; ctx.lineWidth=2.4; ctx.beginPath();
+  for(let i=i0;i<=i1;i++){ const P=[X(XI(i)),Ypx(XI(i),depth[i])]; i===i0?ctx.moveTo(...P):ctx.lineTo(...P); }
+  ctx.stroke();
+  // energy grade line
+  if(st.egl){
+    ctx.strokeStyle='#5c257e'; ctx.lineWidth=1.3; ctx.setLineDash([6,4]); ctx.beginPath();
+    for(let i=i0;i<=i1;i++){ const d=depth[i], hv=Qv()*Qv()/(2*G*Math.pow(geom(d).A,2));
+      const P=[X(XI(i)),Ypx(XI(i),d+hv)]; i===i0?ctx.moveTo(...P):ctx.lineTo(...P); }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  // bed
+  ctx.strokeStyle='#aaa6a0'; ctx.lineWidth=2.6;
+  ctx.beginPath(); ctx.moveTo(X(0),bedPx(0)); ctx.lineTo(X(1),bedPx(1)); ctx.stroke();
+
+  // NDL & CDL
+  const pline=(d,color)=>{ ctx.strokeStyle=color; ctx.setLineDash([7,5]); ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.moveTo(X(0),Ypx(0,d)); ctx.lineTo(X(1),Ypx(1,d)); ctx.stroke();
+    ctx.setLineDash([]); };
+  if(isFinite(r.yn)) pline(r.yn,css('--sub'));
+  pline(r.yc,css('--crit'));
+
+  // direct-step staircase, anchored at the control section (and revealed with the march)
+  if(st.step&&r.ds.ok&&r.ds.pts.length>1){
+    const reach=mar.on?mar.p*L:Infinity;
+    const shown=r.ds.pts.filter(q=>Math.abs(q[0])<=reach);
+    ctx.strokeStyle=css('--violet'); ctx.lineWidth=1.6; ctx.beginPath();
+    shown.forEach((q,k)=>{ const xi=xOf(Math.abs(q[0]));
+      k?ctx.lineTo(X(xi),Ypx(xi,q[1])):ctx.moveTo(X(xi),Ypx(xi,q[1])); });
+    ctx.stroke();
+    ctx.fillStyle=css('--violet');
+    for(const [dx,yy] of shown){ const xi=xOf(Math.abs(dx));
+      ctx.beginPath(); ctx.arc(X(xi),Ypx(xi,yy),2.8,0,7); ctx.fill(); }
+  }
+
+  // particles at the true local velocity V = Q/A(y)
+  const Vm=Qv()/geom(Math.max(0.02,(depth[0]+depth[NS])/2)).A;
+  const cross=14;                              // seconds of screen time to cross the reach
+  lastTC=`1 s ≈ ${fT(L/Vm/cross)} of real flow`;
+  if(st.part&&dt>0){
+    for(let i=0;i<NPART;i++){
+      const d=depth[Math.round(clamp(pxi[i],0,1)*NS)];
+      pxi[i]+=Vel(d)/(Vm*cross)*dt;
+      if(pxi[i]>1) pxi[i]-=1;
+    }
+  }
+  if(st.part){
+    ctx.fillStyle='#e30613';
+    for(let i=0;i<NPART;i++){
+      const fr=clamp(pxi[i],0,1), idx=Math.round(fr*NS);
+      if(idx<i0||idx>i1) continue;
+      const xi=XI(idx);
+      ctx.beginPath(); ctx.arc(X(xi),Ypx(xi,pfr[i]*depth[idx]),1.7,0,7); ctx.fill();
+    }
+  }
+
+  // wave speeds V ± √(gD): why the control sits where it does
+  if(st.chars){
+    for(const fr of [0.22,0.5,0.78]){
+      const idx=Math.round(fr*NS), xi=XI(idx);
+      const d=depth[idx], g=geom(d);
+      const V=Qv()/g.A, c=Math.sqrt(G*g.A/g.T);
+      const k=46/Math.max(V+c,1e-6), yy=Ypx(xi,d)-16;
+      arrow(ctx,X(xi),yy,X(xi)+(V+c)*k,yy,'#006d9c',1.8);
+      arrow(ctx,X(xi),yy+11,X(xi)+(V-c)*k,yy+11,(V-c)<0?css('--ok'):css('--sup'),1.8);
+    }
+  }
+
+  // control section marker (+ probe during the march)
+  const cxi=r.sub?1:0, cd=depth[r.sub?NS:0];
+  ctx.strokeStyle=css('--sup'); ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(X(cxi),bedPx(cxi)); ctx.lineTo(X(cxi),Ypx(cxi,cd)); ctx.stroke();
+  ctx.fillStyle=css('--sup'); ctx.beginPath(); ctx.arc(X(cxi),Ypx(cxi,cd),5.5,0,7); ctx.fill();
+  let probe=null;
+  if(mar.on){
+    const idx=Math.round((r.sub?1-mar.p:mar.p)*NS), xi=XI(idx);
+    const d=depth[idx], slope=dydx(d);
+    ctx.fillStyle=css('--accent'); ctx.beginPath(); ctx.arc(X(xi),Ypx(xi,d),5,0,7); ctx.fill();
+    // tangent of the true water-surface slope in screen units: bed tilt + dy/dx
+    const half=Math.min(PW*0.10,70), g=dd/PW-slope*sy/sx;
+    ctx.strokeStyle=css('--accent'); ctx.lineWidth=1.6; ctx.beginPath();
+    ctx.moveTo(X(xi)-half,Ypx(xi,d)-half*g); ctx.lineTo(X(xi)+half,Ypx(xi,d)+half*g);
+    ctx.stroke();
+    probe={xi,d,slope};
+  }
+  ctx.restore();
+
+  /* ---- text layer, painted last and de-overlapped in priority order ---- */
+  label(r.cls.name, W*0.47, M.t+14, css('--ink'));
+  label('Flow ⟶', X(0.05), M.t+14);
+  if(st.step&&r.ds.ok&&r.ds.pts.length>1)
+    label(`direct step, N = ${r.N}  (Δx = ΔE/(S₀ − S̄_f))`, X(0.22), M.t+34, css('--violet'));
+  if(st.chars)
+    label('V + √(gD) →  and  V − √(gD)  —  green means news travels upstream',
+      X(0.22), M.t+54);
+  label(`control  y₀ = ${st.y0.toFixed(2)} m  (${r.sub?'downstream':'upstream'})`,
+    r.sub?X(1)-252:X(0.17), Ypx(cxi,cd)-16, css('--sup'));
+  if(isFinite(r.yn)) label(`NDL — normal depth = ${r.yn.toFixed(3)} m`,
+    X(r.sub?0.66:0.74), Ypx(0.66,r.yn)-7, css('--sub'));
+  label(`CDL — critical depth = ${r.yc.toFixed(3)} m`, X(r.sub?0.36:0.48), Ypx(0.36,r.yc)+17, css('--crit'));
+  if(r.note) label(r.note, X(r.sub?0.18:0.30),
+    Ypx(XI(r.sub?0:NS),depth[r.sub?0:NS])-34);
+  if(st.zones){
+    if(isFinite(r.yn)) label('Zone 1',X(0.012),Ypx(0.012,(zHi+ymax)/2)+4,'#7d9ad8');
+    label('Zone 2',X(0.012),Ypx(0.012,(zLo+zHi)/2)+4,'#3fae85');
+    label('Zone 3',X(0.012),Ypx(0.012,zLo/2)+4,'#c96a6a');
+  }
+  if(probe) label(`probe  y = ${probe.d.toFixed(3)} m,  dy/dx = ${probe.slope.toExponential(2)}`,
+    X(probe.xi)+(probe.xi>0.6?-236:14), Ypx(probe.xi,probe.d)+30, css('--accent'));
+
+  // footer: bed slope caption + horizontal scale bar
+  ctx.font='11px Segoe UI'; ctx.fillStyle=css('--dim');
+  ctx.fillText(`Bed slope S₀ = ${fS(s0)}`
+    +(s0===0?'':`  —  true ${trueDrop>=0?'fall':'rise'} of `
+      +`${Math.abs(trueDrop).toFixed(2)} m over the reach; the drawn tilt is schematic`),
+    M.l, H-M.b+16);
+  ctx.strokeStyle=css('--dim'); ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(X(0),H-M.b+32); ctx.lineTo(X(0.25),H-M.b+32); ctx.stroke();
+  ctx.fillStyle=css('--dim');
+  ctx.fillText(fL(Lp*0.25), X(0.06), H-M.b+44);
+}
+
+/* =================== phase portrait: dy/dx against y =================== */
+const D0=1e-5, DM=1, DN=Math.log10(1+DM/D0);
+const tX=d=>{ const s=Math.sign(d), a=Math.min(Math.abs(d),DM);
+  return s*Math.log10(1+a/D0)/DN; };
+function drawPhase(r){
+  const [ctx,W,H]=fitCanvas($('phase'));
+  ctx.clearRect(0,0,W,H);
+  const M={l:46,r:14,t:30,b:34}, PW=W-M.l-M.r, PH=H-M.t-M.b;
+  let ymax=Math.max(isFinite(r.yn)?r.yn:0, r.yc, st.y0, r.yEnd)*1.45+0.02;
+  const X=d=>M.l+(tX(d)+1)/2*PW;
+  const Y=y=>H-M.b-clamp(y/ymax,0,1)*PH;
+  const label=mkLabel(ctx,W,H,M);
+
+  ctx.font='600 12px Segoe UI'; ctx.fillStyle=css('--ink');
+  ctx.fillText('Phase portrait — dy/dx (signed log) against depth y (m)', 6, 15);
+
+  // zone shading matched to the profile panel
+  const hi=isFinite(r.yn)?Math.max(r.yn,r.yc):ymax, lo=isFinite(r.yn)?Math.min(r.yn,r.yc):r.yc;
+  const band=(a,b,c)=>{ ctx.fillStyle=c; ctx.fillRect(M.l,Y(b),PW,Y(a)-Y(b)); };
+  band(hi,ymax,'rgba(0,109,156,.07)'); band(lo,hi,'rgba(8,120,63,.07)'); band(0,lo,'rgba(227,6,19,.06)');
+
+  // grid
+  ctx.font='10.5px Segoe UI';
+  for(const d of [-0.1,-0.01,-0.001,-1e-4,0,1e-4,0.001,0.01,0.1]){
+    ctx.strokeStyle=d===0?'#6a6a6a':css('--line'); ctx.lineWidth=d===0?1.4:1;
+    ctx.beginPath(); ctx.moveTo(X(d),M.t); ctx.lineTo(X(d),H-M.b); ctx.stroke();
+    if(d!==0&&Math.abs(d)>=1e-3){ ctx.fillStyle=css('--dim');
+      const t=(d>0?'':'−')+Math.abs(d); ctx.fillText(t,X(d)-11,H-M.b+13); }
+  }
+  ctx.fillStyle=css('--dim'); ctx.fillText('0',X(0)-3,H-M.b+13);
+  for(let k=1;k<=4;k++){ const v=ymax*k/4;
+    ctx.strokeStyle=css('--line'); ctx.beginPath();
+    ctx.moveTo(M.l,Y(v)); ctx.lineTo(W-M.r,Y(v)); ctx.stroke();
+    ctx.fillStyle=css('--dim'); ctx.fillText(v.toFixed(2),M.l-34,Y(v)+4); }
+
+  // the curve dy/dx(y), broken at the pole y = y꜀
+  ctx.strokeStyle=css('--accent'); ctx.lineWidth=2.2; ctx.beginPath();
+  let pen=false;
+  for(let i=1;i<=460;i++){
+    const y=ymax*i/460, d=dydx(y);
+    if(!isFinite(d)||Math.abs(1-Fr2(y))<4e-3){ pen=false; continue; }
+    const P=[X(clamp(d,-DM,DM)),Y(y)]; pen?ctx.lineTo(...P):(ctx.moveTo(...P),pen=true);
+  }
+  ctx.stroke();
+
+  // NDL (zero of the numerator) and CDL (pole of the denominator)
+  if(isFinite(r.yn)){
+    ctx.strokeStyle=css('--sub'); ctx.setLineDash([7,5]); ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.moveTo(M.l,Y(r.yn)); ctx.lineTo(W-M.r,Y(r.yn)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle=css('--sub'); ctx.beginPath(); ctx.arc(X(0),Y(r.yn),5,0,7); ctx.fill();
+    label('NDL — zero of the numerator', X(0)+10, Y(r.yn)-8, css('--sub'));
+  }
+  ctx.strokeStyle=css('--crit'); ctx.setLineDash([7,5]); ctx.lineWidth=1.4;
+  ctx.beginPath(); ctx.moveTo(M.l,Y(r.yc)); ctx.lineTo(W-M.r,Y(r.yc)); ctx.stroke();
+  ctx.setLineDash([]);
+  label('CDL — pole of the denominator', M.l+8, Y(r.yc)+15, css('--crit'));
+
+  // direction of travel of the depth as we march away from the control
+  for(let k=1;k<=13;k++){
+    const y=ymax*k/14;
+    if(Math.abs(y-r.yc)/r.yc<0.06) continue;
+    if(isFinite(r.yn)&&Math.abs(y-r.yn)/r.yn<0.04) continue;
+    const d=dydx(y); if(!isFinite(d)) continue;
+    // dy/ds in the marching direction: subcritical depths (y > y꜀) are integrated
+    // upstream so dy/ds = −dy/dx; supercritical ones downstream so dy/ds = +dy/dx.
+    // Screen y is inverted, so a positive dy/ds must draw an upward triangle.
+    const dir=(y>r.yc?-1:1)*Math.sign(d);
+    tri(ctx,X(clamp(d,-DM,DM)),Y(y),dir,'rgba(29,29,27,.58)',5);
+  }
+  ctx.font='10.5px Segoe UI'; ctx.fillStyle=css('--dim');
+  ctx.fillText('▲▼ = depth change while marching from the control', 6, H-6);
+
+  // live marker: the control, or the probe while marching
+  const yp=mar.on?depth[Math.round((r.sub?1-mar.p:mar.p)*NS)]:st.y0;
+  const dp=dydx(yp);
+  if(isFinite(dp)){
+    ctx.fillStyle=css('--sup'); ctx.beginPath();
+    ctx.arc(X(clamp(dp,-DM,DM)),Y(yp),5.5,0,7); ctx.fill();
+    ctx.strokeStyle='rgba(227,6,19,.5)'; ctx.setLineDash([2,4]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(M.l,Y(yp)); ctx.lineTo(X(clamp(dp,-DM,DM)),Y(yp));
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+
+/* =================== profile-family map =================== */
+let dirty=true, fam=[];
+function famKey(){ return [st.shape,st.b,st.m,st.n,st.logQ,st.u].join('|'); }
+let famK='';
+function rebuildFamily(yn,yc){
+  const reps=[];
+  if(!isFinite(yn)) reps.push({z:2,y:1.7*yc},{z:3,y:0.48*yc});
+  else if(Math.abs(yn-yc)/yc<0.02) reps.push({z:1,y:1.5*yc},{z:3,y:0.62*yc});
+  else{ const hi=Math.max(yn,yc), lo=Math.min(yn,yc);
+    reps.push({z:1,y:1.4*hi},{z:2,y:Math.sqrt(lo*hi)},{z:3,y:0.5*lo}); }
+  fam=reps.map(o=>{ const res=integrate(yn,yc,o.y); return {z:o.z, y0:o.y, res}; });
+  famK=famKey(); dirty=false;
+}
+function drawFamily(r){
+  if(dirty||famK!==famKey()) rebuildFamily(r.yn,r.yc);
+  const [ctx,W,H]=fitCanvas($('fam'));
+  ctx.clearRect(0,0,W,H);
+  const M={l:14,r:14,t:30,b:42}, PW=W-M.l-M.r, PH=H-M.t-M.b;
+  const label=mkLabel(ctx,W,H,M);
+  const L=r.cls.L;
+  let ymax=Math.max(isFinite(r.yn)?r.yn:0, r.yc);
+  for(const f of fam) for(const p of f.res.prof) ymax=Math.max(ymax,p[1]);
+  ymax=Math.min(ymax,6*r.yc)*1.06+0.02;
+  const dd=S0()===0?0:Math.sign(S0())*PH*0.14;
+  const sy=(PH-Math.abs(dd)-16)/ymax;
+  const Y0=H-M.b-Math.max(0,-dd)-2;
+  const bedPx=xi=>Y0-(1-xi)*dd;
+  const X=xi=>M.l+xi*PW, Ypx=(xi,d)=>bedPx(xi)-d*sy;
+
+  ctx.font='600 12px Segoe UI'; ctx.fillStyle=css('--ink');
+  ctx.fillText(`The ${L} family — every profile this bed can carry`, M.l, 15);
+
+  // bed + NDL + CDL
+  ctx.strokeStyle='#aaa6a0'; ctx.lineWidth=2.4;
+  ctx.beginPath(); ctx.moveTo(X(0),bedPx(0)); ctx.lineTo(X(1),bedPx(1)); ctx.stroke();
+  const pline=(d,c)=>{ ctx.strokeStyle=c; ctx.setLineDash([7,5]); ctx.lineWidth=1.3;
+    ctx.beginPath(); ctx.moveTo(X(0),Ypx(0,d)); ctx.lineTo(X(1),Ypx(1,d)); ctx.stroke();
+    ctx.setLineDash([]); };
+  if(isFinite(r.yn)){ pline(r.yn,css('--sub'));
+    label('NDL', X(0.90), Ypx(0.90,r.yn)-7, css('--sub')); }
+  pline(r.yc,css('--crit'));
+  label('CDL', X(0.90), Ypx(0.90,r.yc)+16, css('--crit'));
+
+  // one integrated curve per zone, anchored at its own control end,
+  // each normalised to the panel width (its true length is printed alongside)
+  for(const f of fam){
+    const nm=L+f.z, active=(nm===r.cls.name);
+    const sub=f.res.sub, pr=f.res.prof, LL=f.res.L;
+    ctx.strokeStyle=active?css('--accent'):'rgba(92,92,92,.42)';
+    ctx.lineWidth=active?2.6:1.5;
+    ctx.beginPath();
+    for(let i=0;i<pr.length;i++){
+      const xi=0.06+0.88*(pr[i][0]/LL);
+      const P=[X(xi),Ypx(xi,pr[i][1])]; i?ctx.lineTo(...P):ctx.moveTo(...P);
+    }
+    ctx.stroke();
+    const cxi=sub?0.94:0.06, cd=sub?pr[pr.length-1][1]:pr[0][1];
+    ctx.fillStyle=active?css('--sup'):'rgba(92,92,92,.48)';
+    ctx.beginPath(); ctx.arc(X(cxi),Ypx(cxi,cd),active?4.5:3,0,7); ctx.fill();
+    // anchor each label at its own panel position so the three never collide
+    const tx={1:0.30, 2:0.62, 3:0.22}[f.z], off={1:-10, 2:17, 3:-10}[f.z];
+    const target=(tx-0.06)/0.88*LL;
+    let j=0; while(j<pr.length-2 && pr[j+1][0]<target) j++;
+    label(`${nm}  (${fL(LL)})`, X(tx), Ypx(tx,pr[j][1])+off,
+      active?css('--accent'):'rgba(29,29,27,.72)');
+  }
+  ctx.font='10.5px Segoe UI'; ctx.fillStyle=css('--dim');
+  ctx.fillText('Horizontal scale normalised; true length in brackets.',
+    M.l, H-M.b+16);
+  ctx.fillText('● control: subcritical from right, supercritical from left.',
+    M.l, H-M.b+30);
+}
+
+/* =================== main loop =================== */
+let prev=performance.now(), sweepT=0, sweepST=0;
+function frame(now){
+  requestAnimationFrame(frame);
+  const raw=Math.min((now-prev)/1000,0.05); prev=now;
+  const dt=st.paused?0:raw;                    // pause freezes every physical process
+  if(st.sweepY&&dt>0){
+    sweepT+=dt/17;
+    const yn=normalDepth(), yc=criticalDepth();
+    const hi=Math.min(10,1.9*Math.max(isFinite(yn)?yn:yc,yc)), lo=Math.max(0.03,0.28*yc);
+    const f=1-Math.abs(1-(sweepT%1)*2);
+    st.y0=lo+(hi-lo)*f; $('s-y0').value=st.y0; syncChips();
+  }
+  if(st.sweepS&&dt>0){
+    sweepST+=dt/22;
+    const f=1-Math.abs(1-(sweepST%1)*2);
+    st.u=-60+(300-(-60))*f; $('s-S0').value=st.u; dirty=true; syncChips();
+  }
+  const r=solve();
+  if(mar.on&&dt>0){ mar.p=Math.min(1,mar.p+dt/mar.T); }
+  drawProfile(r,dt);                            // sets lastTC from the live reach length
+  drawPhase(r);
+  drawFamily(r);
+  updateReadout(r,lastTC);
+}
+requestAnimationFrame(frame);
+
+/* headless verification / telemetry hook */
+window.LAB={st, mar, solve, integrate, directStep, normalDepth, criticalDepth, criticalSlope,
+  geom, Sf, Fr2, Ehead, dydx, S0, Qv, uOf, classify,
+  step:ms=>{ const r=solve(); if(mar.on) mar.p=Math.min(1,mar.p+ms/1000/mar.T);
+    drawProfile(r,ms/1000); drawPhase(r); drawFamily(r); updateReadout(r,lastTC); return r; }};
+</script>
+</body>
+</html>

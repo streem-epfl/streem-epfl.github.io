@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Specific Energy, Sluice Gate &amp; Gradually Varied Flow</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../assets/vendor/katex/katex.min.css">
+<script defer src="../../assets/vendor/katex/katex.min.js"></script>
+<script defer src="../../assets/scripts/streem-math.js"></script>
+<style>
+  :root{--bg:#f5f5f5;--panel:#fff;--panel2:#f0f0f0;--ink:#1d1d1b;--dim:#5c5c5c;
+    --accent:#e30613;--sub:#006d9c;--crit:#9b5b00;--sup:#e30613;--ok:#08783f;--line:#d6d6d6;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;}
+  .panel{position:absolute;background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;backdrop-filter:blur(6px);font-size:13px;line-height:1.45;z-index:2;}
+  #ui{left:12px;top:12px;width:272px;max-height:calc(100% - 24px);overflow-y:auto;}
+  #readout{right:12px;top:12px;width:400px;max-height:calc(100% - 24px);overflow-y:auto;}
+  #stage{position:absolute;inset:0;padding:12px 426px 64px 298px;display:flex;flex-direction:column;gap:10px;}
+  #flumeWrap{flex:1.28;min-height:0;} #diagramWrap{flex:.72;min-height:285px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;gap:8px;}
+  canvas.view{width:100%;height:100%;display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;}
+  #diagramLegend{grid-column:1/-1;justify-self:end;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px 12px;padding:5px 8px;background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:7px;font-size:10.5px;line-height:1.2;}
+  .legend-point{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}.legend-point::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--point);box-shadow:0 0 0 1px rgba(0,0,0,.28);}.legend-point.inactive{opacity:.28;}
+  #actions{left:50%;transform:translateX(-50%);bottom:12px;display:flex;gap:8px;padding:8px;}
+  h1{font-size:14px;margin-bottom:2px;color:var(--accent);} .sub{color:var(--dim);font-size:11px;margin-bottom:10px;}
+  h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:12px 0 6px;border-bottom:1px solid var(--line);padding-bottom:3px;}
+  label.row{display:flex;justify-content:space-between;align-items:center;margin:7px 0 2px;font-size:12.5px;}
+  label.row .val{color:var(--accent);font-variant-numeric:tabular-nums;font-weight:600;}
+  input[type=range]{width:100%;accent-color:var(--accent);} .chk{display:flex;gap:7px;align-items:center;margin:6px 0;font-size:12.5px;cursor:pointer;}
+  .number-stepper{display:grid;grid-template-columns:minmax(0,1fr) auto 31px 31px;align-items:center;gap:5px;margin-top:3px;}
+  .number-stepper input{width:100%;min-width:0;border:1px solid #8b8b8b;border-radius:6px;background:#fff;color:var(--ink);padding:6px 8px;font:600 13px "Segoe UI",sans-serif;font-variant-numeric:tabular-nums;}
+  .number-stepper input:focus{outline:2px solid rgba(227,6,19,.22);border-color:var(--accent);}
+  .number-stepper input::-webkit-inner-spin-button,.number-stepper input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+  .number-stepper .unit{color:var(--dim);font-size:12px;}.number-stepper .step-arrow{height:30px;padding:0;border-radius:6px;font-size:12px;font-weight:700;line-height:1;}
+  .chk input{accent-color:var(--accent);} button{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 13px;font-size:12.5px;cursor:pointer;}
+  button:hover{border-color:var(--accent);color:var(--accent);} button.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
+  table.vals{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;} table.vals td{padding:2.5px 0;font-size:12.5px;}
+  table.vals td:first-child{color:var(--dim);} table.vals td:last-child{text-align:right;font-weight:600;white-space:nowrap;}
+  .formula{font-family:Cambria,Georgia,serif;font-size:12.5px;color:#353535;background:var(--panel2);border-radius:6px;padding:7px 9px;margin-top:6px;}
+  .formula .katex-display{margin:0;overflow-x:auto;overflow-y:hidden;}.note{font-size:11px;color:var(--dim);margin-top:8px;}
+  .status{margin-top:8px;padding:7px 9px;border-radius:7px;text-align:center;color:#fff;font-weight:700;font-size:11.5px;background:var(--sub);}
+  .status.super{background:var(--sup);} .status.critical{background:var(--crit);} .status.drowned{background:#5c257e;} .hidden{display:none;}
+  @media(max-width:1250px){html,body{overflow-y:auto;height:auto;min-height:100%;}body{display:flex;flex-direction:column;}
+    .panel{position:static;width:auto;max-height:none;margin:10px 12px 0;}#ui{order:1;}#stage{order:2;position:static;padding:10px 12px;}
+    #actions{order:3;align-self:center;transform:none;}#readout{order:4;margin-bottom:12px;}#flumeWrap{flex:none;height:470px;}#diagramWrap{flex:none;height:auto;grid-template-columns:1fr;grid-template-rows:320px 320px auto;}#diagramLegend{grid-column:1;}}
+</style>
+</head>
+<body>
+<div id="ui" class="panel">
+  <h1>Specific Energy, Gate &amp; Flow Profiles</h1>
+  <div class="sub">Rectangular channel · sluice-gate control, GVF and hydraulic jump</div>
+
+  <h2>Flow and roughness</h2>
+  <label for="s-Q" class="row">Discharge Q <span id="v-Q" class="val"></span></label>
+  <input id="s-Q" type="range" min="1" max="12" step="0.1" value="4.2">
+  <label for="s-n" class="row">Manning n <span id="v-n" class="val"></span></label>
+  <input id="s-n" type="range" min="0.010" max="0.040" step="0.001" value="0.013">
+  <div class="note">Channel width b = 0.20 m. In SI units, <span data-tex="n=\frac{1}{K_s}"></span>, the inverse of Strickler’s coefficient.</div>
+
+  <h2>Upstream reach</h2>
+  <label for="s-Su" class="row">Bed slope <span data-tex="S_{0,u}"></span> <span id="v-Su" class="val"></span></label>
+  <input id="s-Su" type="range" min="0.0005" max="0.005" step="0.0001" value="0.0020">
+  <div class="note">The M1 curve is integrated upstream from <span data-tex="y_g"></span> until <span data-tex="|y-y_{n,u}|\leq0.01|y_g-y_{n,u}|"></span>. Its computed reach is compressed horizontally in the drawing.</div>
+
+  <h2>Sluice gate</h2>
+  <label for="i-a" class="row">Opening <span data-tex="a"></span></label>
+  <div class="number-stepper">
+    <input id="i-a" type="number" min="5" max="120" step="0.5" value="12.0" inputmode="decimal" aria-label="Gate opening in millimetres">
+    <span class="unit">mm</span>
+    <button id="a-up" class="step-arrow" type="button" aria-label="Increase gate opening" title="Increase by 0.5 mm">▲</button>
+    <button id="a-down" class="step-arrow" type="button" aria-label="Reduce gate opening" title="Reduce by 0.5 mm">▼</button>
+  </div>
+  <div class="note">The gate controls the upstream reach only when <span data-tex="a<y_{n,u}"></span>. For a controlling gate, the contracted jet uses <span data-tex="y_v=C_c a, C_c=0.60"></span>.</div>
+
+  <h2>Downstream reach</h2>
+  <label for="s-Sd" class="row">Bed slope <span data-tex="S_{0,d}"></span> <span id="v-Sd" class="val"></span></label>
+  <input id="s-Sd" type="range" min="0.0005" max="0.1200" step="0.0005" value="0.0020">
+  <div class="note">The downstream boundary is <span data-tex="y_{n,d}"></span>. For <span data-tex="y_{n,d}>y_c"></span>, the jump regime follows the comparison between <span data-tex="F_s(y_v)"></span> and <span data-tex="F_s(y_{n,d})"></span>. A supercritical normal depth produces an S2 or S3 profile without a jump.</div>
+
+  <h2>Show</h2>
+  <label class="chk"><input id="t-egl" type="checkbox" checked> Upstream energy grade line</label>
+  <label class="chk"><input id="t-yc" type="checkbox" checked> Critical-depth reference</label>
+  <div class="note"><b>Read the flume from left to right:</b> the M1 profile reaches the gate, the jet contracts, and the downstream force comparison produces a drowned jump, a jump at the vena contracta, or a schematically displaced jump. If <span data-tex="y_{n,d}<y_c"></span>, an S2/S3 profile reaches normal flow without a jump.</div>
+</div>
+
+<div id="readout" class="panel">
+  <h2 style="margin-top:0">Upstream gate checks</h2>
+  <table class="vals">
+    <tr><td>Gate opening <span data-tex="(a)"></span></td><td id="o-a"></td></tr>
+    <tr><td>Upstream normal depth <span data-tex="(y_{n,u})"></span></td><td id="o-ynu"></td></tr>
+    <tr><td>Opening condition <span data-tex="a<y_{n,u}"></span></td><td id="o-condition"></td></tr>
+    <tr><td>Energy residual <span data-tex="|E(y_g)-E(y_v)|"></span></td><td id="o-Echeck"></td></tr>
+  </table>
+  <div id="up-status" class="status">CHECKING GATE CONTROL</div>
+
+  <h2>Control depths</h2>
+  <table class="vals">
+    <tr><td>Depth at the gate <span data-tex="(y_g)"></span></td><td id="o-yg"></td></tr>
+    <tr><td>Vena-contracta depth <span data-tex="(y_v)"></span></td><td id="o-yv"></td></tr>
+    <tr><td>Critical depth <span data-tex="(y_c)"></span></td><td id="o-yc"></td></tr>
+    <tr><td>Downstream normal depth <span data-tex="(y_{n,d})"></span></td><td id="o-ynd"></td></tr>
+  </table>
+
+  <h2>Gate and specific energy</h2>
+  <table class="vals">
+    <tr><td>Discharge per width <span data-tex="q"></span></td><td id="o-q"></td></tr>
+    <tr><td>Jet velocity <span data-tex="V_v"></span></td><td id="o-Vv"></td></tr>
+    <tr><td>Jet Froude number <span data-tex="Fr_v"></span></td><td id="o-Frv"></td></tr>
+    <tr><td>Gate specific energy <span data-tex="E_g"></span></td><td id="o-Eg"></td></tr>
+  </table>
+
+  <h2>Downstream adjustment</h2>
+  <table class="vals">
+    <tr><td>Normal-flow Froude <span data-tex="Fr_{n,d}"></span></td><td id="o-Frnd"></td></tr>
+    <tr><td>Vena specific force <span data-tex="F_s(y_v)"></span></td><td id="o-Fv"></td></tr>
+    <tr><td>Tailwater specific force <span data-tex="F_s(y_{n,d})"></span></td><td id="o-Fn"></td></tr>
+    <tr><td>Downstream profile</td><td id="o-profile"></td></tr>
+    <tr><td>Jet depth at jump <span data-tex="(y_1)"></span></td><td id="o-yj"></td></tr>
+    <tr><td>Conjugate depth <span data-tex="(y_2)"></span></td><td id="o-y2"></td></tr>
+    <tr><td>Jump energy loss <span data-tex="h_L"></span></td><td id="o-hL"></td></tr>
+  </table>
+  <div id="down-status" class="status">DOWNSTREAM NORMAL FLOW</div>
+
+  <div id="formula" class="formula"></div>
+  <div class="note">For a pushed jump, its displayed location is deliberately schematic. The pre-jump depth is calculated from <span data-tex="F_s(y_1)=F_s(y_{n,d})"></span>; the connecting M3 profile is obtained from the gradually varied flow equation. The interface treats forces within 1.5% as the immediate-jump equality case.</div>
+</div>
+
+<div id="stage">
+  <div id="flumeWrap"><canvas id="flume" class="view"></canvas></div>
+  <div id="diagramWrap">
+    <canvas id="energyDiagram" class="view"></canvas>
+    <canvas id="forceDiagram" class="view"></canvas>
+    <div id="diagramLegend" aria-label="Common chart legend">
+      <span class="legend-point" data-point="ynu" style="--point:#006d9c">Upstream normal <span data-tex="y_{n,u}"></span></span>
+      <span class="legend-point" data-point="yg" style="--point:#5c257e">Gate <span data-tex="y_g"></span></span>
+      <span class="legend-point" data-point="yv" style="--point:#e30613">Vena <span data-tex="y_v"></span></span>
+      <span class="legend-point" data-point="yc" style="--point:#9b5b00">Critical <span data-tex="y_c"></span></span>
+      <span class="legend-point" data-point="ynd" style="--point:#08783f">Downstream normal <span data-tex="y_{n,d}"></span></span>
+      <span class="legend-point" data-point="y1" style="--point:#d45d00">Pre-jump <span data-tex="y_1"></span></span>
+      <span class="legend-point" data-point="y2" style="--point:#008578">Conjugate <span data-tex="y_2"></span></span>
+    </div>
+  </div>
+</div>
+<div id="actions" class="panel"><button id="b-reset">Reset</button></div>
+
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const G=9.81, RHO=1000, B=0.20, CC=0.60, LUP=34, LVC=1.05;
+const state={Q:0.0042,n:0.013,Su:0.002,Sd:0.002,a:0.012,egl:true,yc:true};
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const f2=v=>v.toFixed(2), f3=v=>v.toFixed(3);
+const q=()=>state.Q/B;
+const fmtDepth=v=>v.toFixed(3)+' m';
+const fmtSlope=v=>v<0.001?v.toExponential(2):v.toFixed(4);
+
+function section(y){const A=B*y,P=B+2*y,R=A/P,V=state.Q/A,Fr=V/Math.sqrt(G*y),Sf=state.n*state.n*V*V/Math.pow(R,4/3);return {A,P,R,V,Fr,Sf};}
+function normalDepth(S){let lo=1e-6,hi=4;const discharge=y=>{const g=section(y);return g.A*Math.pow(g.R,2/3)*Math.sqrt(S)/state.n;};while(discharge(hi)<state.Q&&hi<100)hi*=2;for(let i=0;i<80;i++){const m=(lo+hi)/2;if(discharge(m)<state.Q)lo=m;else hi=m;}return (lo+hi)/2;}
+function criticalDepth(){return Math.cbrt(q()*q()/G);}
+function specific(y){return y+q()*q()/(2*G*y*y);}
+function force(y){return q()*q()/(G*y)+y*y/2;}
+function rootEnergy(E,branch){const yc=criticalDepth();if(branch==='sup'){let lo=1e-6,hi=yc;for(let i=0;i<80;i++){const m=(lo+hi)/2;if(specific(m)>E)lo=m;else hi=m;}return (lo+hi)/2;}let lo=yc,hi=Math.max(2*yc,E*1.5);while(specific(hi)<E)hi*=2;for(let i=0;i<80;i++){const m=(lo+hi)/2;if(specific(m)<E)lo=m;else hi=m;}return (lo+hi)/2;}
+function superDepthForForce(F){const yc=criticalDepth();let lo=1e-6,hi=yc;for(let i=0;i<80;i++){const m=(lo+hi)/2;if(force(m)>F)lo=m;else hi=m;}return (lo+hi)/2;}
+function conjugate(y){const Fr=section(y).Fr;return .5*y*(Math.sqrt(1+8*Fr*Fr)-1);}
+function gvf(y,S){const g=section(Math.max(y,1e-5)),den=1-g.Fr*g.Fr;if(Math.abs(den)<0.015)return 0;return (S-g.Sf)/den;}
+function rk4(y,h,S){const k1=gvf(y,S),k2=gvf(y+h*k1/2,S),k3=gvf(y+h*k2/2,S),k4=gvf(y+h*k3,S);return Math.max(1e-5,y+h*(k1+2*k2+2*k3+k4)/6);}
+function trace(y0,x0,xEnd,S){const out=[{x:x0,y:y0}],dir=Math.sign(xEnd-x0),dx=dir*.08;let x=x0,y=y0;for(let i=0;i<1800&&dir*(xEnd-x)>1e-7;i++){const h=dir*Math.min(Math.abs(dx),Math.abs(xEnd-x));y=rk4(y,h,S);x+=h;if(!Number.isFinite(y)||y>20)break;out.push({x,y});}return out;}
+function traceTo(y0,S,target){const out=[{x:LVC,y:y0}];let x=LVC,y=y0;for(let i=0;i<2500;i++){const h=.04,next=rk4(y,h,S);if((target-y)*(target-next)<=0){const f=(target-y)/(next-y||1);x+=h*f;out.push({x,y:target});return out;}x+=h;y=next;out.push({x,y});if(x>LVC+80||y>=criticalDepth()*.999)break;}out.push({x:x+4,y:target});return out;}
+function traceTowardNormal(y0,S,target){
+  const out=[{x:LVC,y:y0}],initialGap=Math.abs(target-y0),tol=Math.max(initialGap*.012,target*2e-4,1e-6);
+  if(initialGap<=tol){out.push({x:LVC+1,y:target});return out;}
+  let x=LVC,y=y0;
+  for(let i=0;i<12000&&x<LVC+220;i++){
+    const h=.02,gap=target-y;let next=rk4(y,h,S),nextGap=target-next;
+    if(!Number.isFinite(next)||gap*nextGap<=0||Math.abs(nextGap)>Math.abs(gap)*1.002){
+      const rate=Math.max(Math.abs(gvf(y,S)),1e-9),tau=clamp(Math.abs(gap)/rate,.15,45);
+      next=target-gap*Math.exp(-h/tau);nextGap=target-next;
+    }
+    x+=h;y=next;out.push({x,y});if(Math.abs(nextGap)<=tol)break;
+  }
+  return out;
+}
+function traceUpstreamM1(yGate,S,target){
+  const raw=[{x:0,y:yGate}],initialGap=yGate-target,tol=Math.max(initialGap*.01,target*2e-4,1e-6);
+  let x=0,y=yGate;
+  for(let i=0;i<50000&&x>-5000&&y-target>tol;i++){
+    const h=-.10,gap=y-target;let next=rk4(y,h,S),nextGap=next-target;
+    if(!Number.isFinite(next)||nextGap<=0||nextGap>gap*1.002){
+      const rate=Math.max(Math.abs(gvf(y,S)),1e-9),length=clamp(gap/rate,.25,250);
+      next=target+gap*Math.exp(-Math.abs(h)/length);nextGap=next-target;
+    }
+    x+=h;y=next;if(i%4===0)raw.push({x,y});
+  }
+  if(raw.at(-1).x!==x)raw.push({x,y});
+  const physicalLength=Math.max(-raw.at(-1).x,1),scale=LUP/physicalLength;
+  return {points:raw.reverse().map(p=>({x:p.x*scale,y:p.y})),physicalLength};
+}
+
+function solve(){
+  const yc=criticalDepth(),ynu=normalDepth(state.Su),ynd=normalDepth(state.Sd),openingClear=state.a>=ynu;
+  const candidateYv=CC*state.a,candidateE=specific(candidateYv),candidateYg=candidateYv<yc?rootEnergy(candidateE,'sub'):candidateYv;
+  const gateActive=!openingClear&&candidateYv<yc&&candidateYg>ynu;
+  const yv=gateActive?candidateYv:null,Ev=gateActive?candidateE:specific(ynu),yg=gateActive?candidateYg:ynu;
+  const upstream=gateActive?traceUpstreamM1(yg,state.Su,ynu):{points:[{x:-LUP,y:ynu},{x:0,y:ynu}],physicalLength:0};
+  const Frnd=section(ynd).Fr,Fn=force(ynd),Fv=gateActive?force(yv):null,y2v=gateActive?conjugate(yv):null;
+  const r={yc,ynu,ynd,yv,yg,Ev,Vv:gateActive?section(yv).V:null,Frv:gateActive?section(yv).Fr:null,up:upstream.points,upstreamLength:upstream.physicalLength,Frnd,Fv,Fn,y2v,gateActive,openingClear,kind:'uncontrolled',profileType:'—'};
+  if(!gateActive){
+    r.down=[{x:.03,y:ynu},{x:30,y:ynu}];r.xEnd=30;return r;
+  }
+  if(ynd<=yc*(1+1e-5)){
+    r.kind='super';r.profileType=Math.abs(yv-ynd)<ynd*.01?'uniform S':(yv<ynd?'S3':'S2');
+    const physical=traceTowardNormal(yv,state.Sd,ynd),rawLength=Math.max(physical.at(-1).x-LVC,.2),shownLength=30,ratio=shownLength/rawLength;
+    r.down=physical.map(p=>({x:LVC+(p.x-LVC)*ratio,y:p.y}));r.xEnd=LVC+shownLength;
+    return r;
+  }
+  const forceDifference=Fn-Fv,relativeDifference=forceDifference/Math.max(Fn,Fv),forceTolerance=.015;
+  r.forceDifference=forceDifference;r.forceTolerance=forceTolerance;
+  if(relativeDifference>forceTolerance){
+    r.kind='drowned';r.profileType='drowned jet';r.yj=yv;r.y2=y2v;r.hL=null;r.xJump=LVC;r.xJumpEnd=LVC+6;r.xEnd=LVC+25;r.down=[{x:LVC,y:ynd},{x:r.xEnd,y:ynd}];
+  }else if(Math.abs(relativeDifference)<=forceTolerance){
+    r.kind='immediate';r.profileType='jump at vena';r.yj=yv;r.y2=y2v;r.hL=Math.pow(r.y2-r.yj,3)/(4*yjSafe(r.yj,r.y2));r.xJump=LVC;r.xJumpEnd=LVC+4;r.xEnd=r.xJumpEnd+14;r.down=[{x:LVC,y:yv}];
+  }else{
+    r.kind='pushed';r.profileType='M3';r.yj=superDepthForForce(Fn);r.y2=conjugate(r.yj);r.hL=Math.pow(r.y2-r.yj,3)/(4*yjSafe(r.yj,r.y2));
+    const physical=traceTo(yv,state.Sd,r.yj), rawLength=Math.max(physical.at(-1).x-LVC,.2), shownLength=clamp(Math.max(12,rawLength),12,30), ratio=shownLength/rawLength;
+    r.down=physical.map(p=>({x:LVC+(p.x-LVC)*ratio,y:p.y}));r.xJump=r.down.at(-1).x;r.xJumpEnd=r.xJump+4;r.xEnd=r.xJumpEnd+14;
+  }
+  return r;
+}
+function yjSafe(y1,y2){return y1*y2;}
+function bed(x){return x<0?-state.Su*x:-state.Sd*x;}
+function clampState(){
+  const ynu=normalDepth(state.Su),aMax=clamp(1.6*ynu,.120,.350);
+  state.a=clamp(state.a,.005,aMax);const input=$('i-a');input.max=(aMax*1000).toFixed(1);if(document.activeElement!==input)input.value=(state.a*1000).toFixed(1);
+}
+function setTex(id,tex){const el=$(id);el.dataset.tex=tex;el.dataset.texDisplay='block';if(window.STREEM_MATH)window.STREEM_MATH.render(el,tex,true);else el.textContent=tex;}
+function setStatusTex(id,tex,klass){const el=$(id);el.className=klass;el.dataset.tex=tex;delete el.dataset.texDisplay;if(window.STREEM_MATH)window.STREEM_MATH.render(el,tex,false);else el.textContent=tex;}
+function updateReadout(r){
+  $('o-a').textContent=fmtDepth(state.a);$('o-ynu').textContent=fmtDepth(r.ynu);$('o-condition').textContent=state.a<r.ynu?'YES':'NO';$('o-yg').textContent=fmtDepth(r.yg);$('o-yv').textContent=r.gateActive?fmtDepth(r.yv):'not formed';$('o-yc').textContent=fmtDepth(r.yc);$('o-ynd').textContent=fmtDepth(r.ynd);
+  $('o-q').textContent=q().toFixed(4)+' m²/s';$('o-Vv').textContent=r.gateActive?f2(r.Vv)+' m/s':'—';$('o-Frv').textContent=r.gateActive?r.Frv.toFixed(2):'—';$('o-Eg').textContent=fmtDepth(r.Ev);
+  $('o-Echeck').textContent=r.gateActive?Math.abs(specific(r.yg)-specific(r.yv)).toExponential(1)+' m':'not applicable';$('o-Frnd').textContent=r.Frnd.toFixed(3);$('o-Fv').textContent=r.gateActive?r.Fv.toFixed(5)+' m²':'—';$('o-Fn').textContent=r.Fn.toFixed(5)+' m²';$('o-profile').textContent=r.profileType;
+  if(r.gateActive)setStatusTex('up-status',String.raw`a<y_{n,u}:\quad \text{M1 profile controlled by }E(y_g)=E(y_v)`,'status');
+  else if(r.openingClear)setStatusTex('up-status',String.raw`a\ge y_{n,u}:\quad \text{gate clear—no upstream effect}`,'status critical');
+  else setStatusTex('up-status',String.raw`a<y_{n,u},\ \text{but no supercritical vena-contracta solution}`,'status critical');
+  if(r.kind==='drowned'){
+    $('o-yj').textContent=fmtDepth(r.yj);$('o-y2').textContent=fmtDepth(r.y2);$('o-hL').textContent='not defined';
+    setStatusTex('down-status',String.raw`F_s(y_{n,d})>F_s(y_v):\quad\text{drowned hydraulic jump}`,'status drowned');
+  }else if(r.kind==='immediate'){
+    $('o-yj').textContent=fmtDepth(r.yj);$('o-y2').textContent=fmtDepth(r.y2);$('o-hL').textContent=fmtDepth(r.hL);
+    setStatusTex('down-status',String.raw`F_s(y_{n,d})\approx F_s(y_v):\quad\text{jump at vena contracta}`,'status super');
+  }else if(r.kind==='pushed'){
+    $('o-yj').textContent=fmtDepth(r.yj);$('o-y2').textContent=fmtDepth(r.y2);$('o-hL').textContent=fmtDepth(r.hL);
+    setStatusTex('down-status',String.raw`F_s(y_{n,d})<F_s(y_v):\quad\text{jump pushed downstream on M3}`,'status super');
+  }else if(r.kind==='super'){
+    $('o-yj').textContent='—';$('o-y2').textContent='—';$('o-hL').textContent='—';
+    setStatusTex('down-status',String.raw`\text{No jump: }${r.profileType}\text{ approaches }y_{n,d}`,'status');
+  }else{
+    $('o-yj').textContent='—';$('o-y2').textContent='—';$('o-hL').textContent='—';
+    setStatusTex('down-status',String.raw`\text{No contracted gate jet}`,'status critical');
+  }
+  if(r.gateActive&&r.kind!=='super')setTex('formula',String.raw`\begin{aligned}
+    E&=y+\frac{q^2}{2gy^2},\qquad y_c=\left(\frac{q^2}{g}\right)^{1/3}\\
+    y_v&=C_ca,\qquad E(y_g)=E(y_v)\\
+    F_s(y)&=\frac{q^2}{gy}+\frac{y^2}{2}\\
+    F_n>F_v&:\ \text{drowned}\\
+    F_n\approx F_v&:\ \text{at vena contracta}\\
+    F_n<F_v&:\ \text{pushed downstream}
+  \end{aligned}`);
+  else if(r.gateActive)setTex('formula',String.raw`\begin{aligned}
+    y_{n,d}&\le y_c\quad\Longrightarrow\quad\text{no hydraulic jump}\\
+    \frac{dy}{dx}&=\frac{S_{0,d}-S_f}{1-Fr^2}\quad(${r.profileType})
+  \end{aligned}`);
+  else if(r.openingClear)setTex('formula',String.raw`\begin{aligned}
+    a&\ge y_{n,u}\quad\Longrightarrow\quad\text{gate clear of the upstream flow}\\
+    y_g&=y_{n,u},\qquad\text{no vena contracta}
+  \end{aligned}`);
+  else setTex('formula',String.raw`\begin{aligned}
+    a&<y_{n,u},\qquad C_ca\ge y_c\\
+    &\text{No supercritical vena-contracta state exists for the M1 model.}
+  \end{aligned}`);
+  updateLegend(r);
+}
+function syncControls(){
+  $('v-Q').textContent=(state.Q*1000).toFixed(1)+' L/s';$('v-n').textContent=state.n.toFixed(3);$('v-Su').textContent=fmtSlope(state.Su);$('v-Sd').textContent=fmtSlope(state.Sd);
+}
+function invalidate(){clampState();syncControls();result=solve();updateReadout(result);requestAnimationFrame(render);}
+function bind(id,key,scale=1){$(id).addEventListener('input',e=>{state[key]=parseFloat(e.target.value)*scale;invalidate();});}
+bind('s-Q','Q',.001);bind('s-n','n');bind('s-Su','Su');bind('s-Sd','Sd');
+function commitOpening(){const input=$('i-a'),mm=parseFloat(input.value);if(Number.isFinite(mm))state.a=mm*.001;invalidate();input.value=(state.a*1000).toFixed(1);}
+$('i-a').addEventListener('keydown',e=>{if(e.key==='Enter'){commitOpening();e.currentTarget.blur();}else if(e.key==='Escape'){e.currentTarget.value=(state.a*1000).toFixed(1);e.currentTarget.blur();}});
+$('i-a').addEventListener('blur',commitOpening);
+$('a-up').onclick=()=>{state.a+=.0005;invalidate();};$('a-down').onclick=()=>{state.a-=.0005;invalidate();};
+[['t-egl','egl'],['t-yc','yc']].forEach(([id,key])=>$(id).addEventListener('change',e=>{state[key]=e.target.checked;requestAnimationFrame(render);}));
+$('b-reset').onclick=()=>{Object.assign(state,{Q:.0042,n:.013,Su:.002,Sd:.002,a:.012,egl:true,yc:true});$('s-Q').value=4.2;$('s-n').value=.013;$('s-Su').value=.002;$('s-Sd').value=.002;$('i-a').value='12.0';['t-egl','t-yc'].forEach(id=>$(id).checked=true);invalidate();};
+
+function fit(cv){const d=Math.min(devicePixelRatio,2),w=cv.clientWidth,h=cv.clientHeight;if(cv.width!==Math.round(w*d)||cv.height!==Math.round(h*d)){cv.width=w*d;cv.height=h*d;}const c=cv.getContext('2d');c.setTransform(d,0,0,d,0,0);return [c,w,h];}
+function labelBoxesOverlap(a,b,gap=4){return a.x<b.x+b.w+gap&&a.x+a.w+gap>b.x&&a.y<b.y+b.h+gap&&a.y+a.h+gap>b.y;}
+function placeLabelBox(x,y,w,h,W,H,occupied){
+  const make=(px,py)=>({x:clamp(px,8,W-w-8),y:clamp(py,8,H-h-8),w,h});
+  const first=make(x,y);if(!occupied)return first;
+  const candidates=[first],stepX=Math.min(w+7,Math.max(58,W*.14)),stepY=h+6;
+  for(let ring=1;ring<=9;ring++){
+    candidates.push(make(x,y-ring*stepY),make(x,y+ring*stepY),make(x-ring*stepX,y),make(x+ring*stepX,y));
+    candidates.push(make(x-ring*stepX,y-ring*stepY),make(x+ring*stepX,y-ring*stepY),make(x-ring*stepX,y+ring*stepY),make(x+ring*stepX,y+ring*stepY));
+  }
+  const seen=new Set();
+  for(const box of candidates){const key=`${box.x.toFixed(1)},${box.y.toFixed(1)}`;if(seen.has(key))continue;seen.add(key);if(!occupied.some(other=>labelBoxesOverlap(box,other))){occupied.push(box);return box;}}
+  let best=null,bestDistance=Infinity;
+  for(let yy=8;yy<=H-h-8;yy+=Math.max(8,h+5))for(let xx=8;xx<=W-w-8;xx+=12){const box={x:xx,y:yy,w,h};if(occupied.some(other=>labelBoxesOverlap(box,other)))continue;const distance=Math.hypot(xx-first.x,yy-first.y);if(distance<bestDistance){best=box;bestDistance=distance;}}
+  const chosen=best||first;occupied.push(chosen);return chosen;
+}
+function roundLabel(c,text,x,y,W,H,occupied=null){c.font='600 12px Segoe UI';const padX=5,padY=4,w=c.measureText(text).width+2*padX,h=13+2*padY,box=placeLabelBox(x,y,w,h,W,H,occupied),xx=box.x,yy=box.y;c.beginPath();c.roundRect(xx,yy,w,h,5);c.fillStyle='rgba(255,255,255,.96)';c.fill();c.strokeStyle='#1d1d1b';c.lineWidth=1;c.stroke();c.fillStyle='#1d1d1b';c.textBaseline='middle';c.fillText(text,xx+padX,yy+h/2);}
+function textRun(text,size=12){return {text,font:`600 ${size}px Segoe UI`,dy:0};}
+function mathRun(text,size=13,dy=0){return {text,font:`italic ${size}px Cambria, Georgia, serif`,dy};}
+function variableRuns(base,sub,size=12){return [mathRun(base,size+1),mathRun(sub,Math.max(8,Math.round(size*.72)),Math.max(3,size*.25))];}
+function depthRuns(name,sub,suffix='',size=12){return [textRun(name+' (',size),...variableRuns('y',sub,size),textRun(')'+suffix,size)];}
+function richWidth(c,runs){let width=0;for(const run of runs){c.font=run.font;width+=c.measureText(run.text).width;}return width;}
+function drawRichRuns(c,runs,x,midY,color='#1d1d1b'){c.fillStyle=color;c.textBaseline='middle';let xx=x;for(const run of runs){c.font=run.font;c.fillText(run.text,xx,midY+(run.dy||0));xx+=c.measureText(run.text).width;}return xx;}
+function roundRichLabel(c,runs,x,y,W,H,size=12,occupied=null){const padX=5,padY=4,w=richWidth(c,runs)+2*padX,h=size+1+2*padY,box=placeLabelBox(x,y,w,h,W,H,occupied),xx=box.x,yy=box.y;c.beginPath();c.roundRect(xx,yy,w,h,5);c.fillStyle='rgba(255,255,255,.96)';c.fill();c.strokeStyle='#1d1d1b';c.lineWidth=1;c.stroke();drawRichRuns(c,runs,xx+padX,yy+h/2);}
+function polyWater(c,points,X,Y,bedFn=bed){c.beginPath();c.moveTo(X(points[0].x),Y(bedFn(points[0].x)));for(const p of points)c.lineTo(X(p.x),Y(bedFn(p.x)+p.y));c.lineTo(X(points.at(-1).x),Y(bedFn(points.at(-1).x)));c.closePath();c.fillStyle='rgba(143,211,235,.62)';c.fill();c.strokeStyle='#006d9c';c.lineWidth=1.8;c.beginPath();points.forEach((p,i)=>i?c.lineTo(X(p.x),Y(bedFn(p.x)+p.y)):c.moveTo(X(p.x),Y(bedFn(p.x)+p.y)));c.stroke();}
+function drawGateDetail(c,r,W,H){
+  const iw=clamp(W*.31,185,270),ih=clamp(H*.29,118,160),ix=W-iw-18,iy=35;
+  const x0=0,x1=1.42,dMax=Math.max(state.a*1.35,r.yc*1.18,r.gateActive?Math.max(r.yv*3.2,r.ynd*1.18):r.ynu*1.25,.025),pad={l:14,r:10,t:30,b:15};
+  const XI=x=>ix+pad.l+(x-x0)*(iw-pad.l-pad.r)/(x1-x0);
+  const YI=y=>iy+ih-pad.b-y*(ih-pad.t-pad.b)/dMax;
+  c.save();c.fillStyle='rgba(255,255,255,.97)';c.strokeStyle='#1d1d1b';c.lineWidth=1;c.beginPath();c.roundRect(ix,iy,iw,ih,7);c.fill();c.stroke();
+  c.fillStyle='#1d1d1b';c.font='600 11px Segoe UI';c.fillText('Gate and vena contracta — detail',ix+10,iy+17);
+  const detail=r.kind==='drowned'?[{x:.025,y:r.ynd}]:r.gateActive?[{x:.025,y:state.a},{x:.30,y:state.a*.94},{x:LVC,y:r.yv}]:[{x:.025,y:r.ynu}];
+  const last=r.down.reduce((best,p)=>Math.abs(p.x-x1)<Math.abs(best.x-x1)?p:best,r.down[0]);detail.push({x:x1,y:r.gateActive?last.y:r.ynu});
+  c.beginPath();c.moveTo(XI(detail[0].x),YI(0));for(const p of detail)c.lineTo(XI(p.x),YI(p.y));c.lineTo(XI(x1),YI(0));c.closePath();c.fillStyle='rgba(143,211,235,.75)';c.fill();
+  c.beginPath();detail.forEach((p,i)=>i?c.lineTo(XI(p.x),YI(p.y)):c.moveTo(XI(p.x),YI(p.y)));c.strokeStyle='#006d9c';c.lineWidth=2;c.stroke();
+  if(r.kind==='drowned'){const core=[{x:.025,y:state.a},{x:.30,y:state.a*.94},{x:LVC,y:r.yv},{x:x1,y:r.yv+(r.y2v-r.yv)*.18}];c.beginPath();core.forEach((p,i)=>i?c.lineTo(XI(p.x),YI(p.y)):c.moveTo(XI(p.x),YI(p.y)));c.strokeStyle='#006d9c';c.setLineDash([4,3]);c.lineWidth=1.4;c.stroke();c.setLineDash([]);}
+  c.beginPath();c.moveTo(XI(x0),YI(0));c.lineTo(XI(x1),YI(0));c.strokeStyle='#77736d';c.lineWidth=2;c.stroke();
+  c.fillStyle='#1d1d1b';c.fillRect(XI(-.035),iy+pad.t,XI(.055)-XI(-.035),YI(state.a)-(iy+pad.t));
+  c.strokeStyle='#1d1d1b';c.lineWidth=1;c.beginPath();c.moveTo(XI(.12),YI(0));c.lineTo(XI(.12),YI(state.a));c.stroke();
+  c.fillStyle='#1d1d1b';c.font='10px Segoe UI';c.fillText('opening a',XI(.16),YI(state.a*.64));
+  if(r.gateActive){drawRichRuns(c,[...variableRuns('y','v',10),textRun(' = ',10),...variableRuns('C','c',10),mathRun('a',11)],XI(LVC)-22,YI(r.yv)-8);}
+  else roundRichLabel(c,depthRuns(r.openingClear?'gate clear: normal depth':'no M1 control: normal depth','n,u','',9),ix+42,iy+34,W,H,9);
+  c.font='10px Segoe UI';c.fillStyle='#1d1d1b';c.fillText('bed-relative vertical detail',ix+10,iy+ih-4);c.restore();
+}
+function drawFlume(r){const [c,W,H]=fit($('flume'));c.clearRect(0,0,W,H);const detailW=clamp(W*.31,185,270),detailH=clamp(H*.29,118,160),labels=[{x:W-detailW-18,y:35,w:detailW,h:detailH}],xmin=-LUP,xmax=r.xEnd,ZB=x=>x<0&&r.gateActive?-state.Su*x*r.upstreamLength/LUP:bed(x),gateTop=Math.max(r.yg+.25,state.a+.18,.55),zmin=Math.min(ZB(xmax),ZB(xmin),0)-Math.max(.025,r.yc*.35),zmax=Math.max(ZB(xmin)+r.up[0].y,r.yg,gateTop)+.04;const M={l:48,r:16,t:28,b:30};const sx=(W-M.l-M.r)/(xmax-xmin),sy=(H-M.t-M.b)/(zmax-zmin),X=x=>M.l+(x-xmin)*sx,Y=z=>H-M.b-(z-zmin)*sy;
+  c.fillStyle='#5c5c5c';c.font='12px Segoe UI';c.fillText('Longitudinal flow profile',M.l,17);
+  c.textAlign='right';c.fillText(r.gateActive?'computed M1 reach compressed horizontally':'vertical scale exaggerated ×'+Math.max(1,sy/sx).toFixed(0),W-M.r,17);c.textAlign='left';
+  const jet=r.gateActive?[{x:.03,y:state.a},{x:.32,y:state.a*.94},{x:LVC,y:r.yv},...r.down.slice(1)]:[{x:.03,y:r.ynu},...r.down.slice(1)];
+  const freeJump=r.kind==='immediate'||r.kind==='pushed';let downstream=r.kind==='drowned'?[{x:.03,y:r.ynd},{x:r.xEnd,y:r.ynd}]:jet;
+  if(freeJump){const rise=[];for(let i=1;i<=20;i++){const t=i/20,ease=t*t*(3-2*t);rise.push({x:r.xJump+(r.xJumpEnd-r.xJump)*t,y:r.yj+(r.ynd-r.yj)*ease});}downstream=[...jet,...rise,{x:r.xEnd,y:r.ynd}];}
+  polyWater(c,r.up,X,Y,ZB);polyWater(c,downstream,X,Y,ZB);
+  if(r.kind==='drowned'){
+    const core=[{x:.03,y:state.a},{x:.32,y:state.a*.94},{x:LVC,y:r.yv},{x:r.xJumpEnd,y:r.yv+(r.y2v-r.yv)*.70}];c.beginPath();c.moveTo(X(core[0].x),Y(ZB(core[0].x)));for(const p of core)c.lineTo(X(p.x),Y(ZB(p.x)+p.y));c.lineTo(X(core.at(-1).x),Y(ZB(core.at(-1).x)));c.closePath();c.fillStyle='rgba(0,109,156,.24)';c.fill();c.beginPath();core.forEach((p,i)=>i?c.lineTo(X(p.x),Y(ZB(p.x)+p.y)):c.moveTo(X(p.x),Y(ZB(p.x)+p.y)));c.strokeStyle='#006d9c';c.setLineDash([4,3]);c.lineWidth=1.4;c.stroke();c.setLineDash([]);
+  }
+  c.strokeStyle='#aaa6a0';c.lineWidth=2.3;c.beginPath();for(let x=xmin;x<=xmax;x+=.05){const p=[X(x),Y(ZB(x))];x===xmin?c.moveTo(...p):c.lineTo(...p);}c.stroke();
+  if(state.yc){for(const [xa,xb] of [[xmin,-.05],[.05,xmax]]){c.strokeStyle='#9b5b00';c.setLineDash([5,4]);c.lineWidth=1;c.beginPath();c.moveTo(X(xa),Y(ZB(xa)+r.yc));c.lineTo(X(xb),Y(ZB(xb)+r.yc));c.stroke();c.setLineDash([]);}roundRichLabel(c,depthRuns('critical depth','c'),X(xmax)-100,Y(ZB(xmax)+r.yc)-58,W,H,12,labels);}
+  c.strokeStyle='#3f3f3f';c.setLineDash([6,4]);c.lineWidth=1;c.beginPath();c.moveTo(X(xmin),Y(ZB(xmin)+r.ynu));c.lineTo(X(-.05),Y(ZB(-.05)+r.ynu));c.stroke();
+  c.beginPath();c.moveTo(X(.05),Y(ZB(.05)+r.ynd));c.lineTo(X(xmax),Y(ZB(xmax)+r.ynd));c.stroke();c.setLineDash([]);roundRichLabel(c,depthRuns('downstream normal depth','n,d'),X(xmax)-210,Y(ZB(xmax)+r.ynd)+9,W,H,12,labels);
+  if(state.egl){const drawE=pts=>{c.strokeStyle='#5c257e';c.setLineDash([4,4]);c.lineWidth=1.2;c.beginPath();pts.forEach((p,i)=>{const v=section(p.y).V,py=Y(ZB(p.x)+p.y+v*v/(2*G));i?c.lineTo(X(p.x),py):c.moveTo(X(p.x),py);});c.stroke();c.setLineDash([]);};drawE(r.up);}
+  c.fillStyle='#1d1d1b';c.fillRect(X(-.11),Y(gateTop),Math.max(3,X(.11)-X(-.11)),Y(state.a)-Y(gateTop));c.strokeStyle='#1d1d1b';c.lineWidth=1;c.strokeRect(X(-.11),Y(gateTop),Math.max(3,X(.11)-X(-.11)),Y(state.a)-Y(gateTop));
+  roundLabel(c,'sluice gate',X(.20),Y(gateTop)-21,W,H,labels);
+  if(r.gateActive){
+    if(r.kind!=='drowned')roundRichLabel(c,depthRuns('vena contracta','v'),X(LVC)-30,Y(ZB(LVC)+r.yv)-30,W,H,12,labels);
+    roundRichLabel(c,depthRuns('M1 profile approaching upstream normal depth','n,u'),X(-LUP)+8,Y(ZB(-LUP)+r.ynu)-31,W,H,12,labels);
+    roundRichLabel(c,depthRuns('level at gate from energy balance','g'),X(-24),Y(r.yg)-31,W,H,12,labels);
+  }else{
+    roundRichLabel(c,depthRuns('unaffected upstream normal depth','n,u'),X(-LUP)+8,Y(ZB(-LUP)+r.ynu)-31,W,H,12,labels);
+    roundLabel(c,r.openingClear?'gate clear — no hydraulic effect':'no M1 control for these inputs',X(-9),Y(r.ynu)-35,W,H,labels);
+  }
+  if(freeJump){
+    const xj=r.xJump;
+    roundLabel(c,r.kind==='immediate'?'hydraulic jump starts at vena contracta':'hydraulic jump — schematic location',X(xj)-45,Y(ZB(xj)+r.ynd)-52,W,H,labels);
+  }else if(r.kind==='drowned'){
+    roundLabel(c,'drowned hydraulic jump',X(LVC+.6),Y(ZB(LVC+.6)+r.ynd)-42,W,H,labels);
+  }else if(r.kind==='super'){
+    roundRichLabel(c,depthRuns(r.profileType+' asymptotic approach to normal depth','n,d'),X(LVC+5),Y(ZB(LVC+5)+Math.max(r.ynd,r.yc))-78,W,H,12,labels);
+  }
+  drawGateDetail(c,r,W,H);
+  c.fillStyle='#1d1d1b';c.font='11px Segoe UI';c.fillText('upstream',X(xmin)+4,H-9);c.fillText('flow →',X(-1),H-9);c.fillText('downstream',X(xmax)-70,H-9);
+}
+const POINT_COLORS={ynu:'#006d9c',yg:'#5c257e',yv:'#e30613',yc:'#9b5b00',ynd:'#08783f',y1:'#d45d00',y2:'#008578'};
+function chartPoints(r){
+  const points=[{key:'ynu',y:r.ynu},{key:'yg',y:r.yg},{key:'yc',y:r.yc},{key:'ynd',y:r.ynd}];
+  if(r.gateActive)points.push({key:'yv',y:r.yv});
+  if(['drowned','immediate','pushed'].includes(r.kind))points.push({key:'y1',y:r.yj},{key:'y2',y:r.y2});
+  return points;
+}
+function updateLegend(r){if(!document.querySelectorAll)return;const active=new Set(chartPoints(r).map(p=>p.key));document.querySelectorAll('#diagramLegend [data-point]').forEach(el=>el.classList.toggle('inactive',!active.has(el.dataset.point)));}
+function tickText(v,limit){if(limit<.015)return v.toFixed(4);if(limit<.15)return v.toFixed(3);return v.toFixed(2);}
+function drawChart(id,r,mode){
+  const [c,W,H]=fit($(id)),M={l:46,r:12,t:27,b:35},points=chartPoints(r),value=mode==='energy'?specific:force;
+  const ymax=Math.max(...points.map(p=>p.y),r.yc)*1.18,xmax=Math.max(...points.map(p=>value(p.y)),value(r.yc))*1.16,X=x=>M.l+x*(W-M.l-M.r)/xmax,Y=y=>H-M.b-y*(H-M.t-M.b)/ymax;
+  c.clearRect(0,0,W,H);c.fillStyle='#5c5c5c';c.font='600 11px Segoe UI';c.fillText(mode==='energy'?'Specific energy':'Specific force',M.l,16);
+  c.font='9px Segoe UI';c.strokeStyle='#e1e1e1';c.fillStyle='#666';c.lineWidth=1;
+  for(let i=0;i<=4;i++){const xv=xmax*i/4,px=X(xv);c.beginPath();c.moveTo(px,M.t);c.lineTo(px,H-M.b);c.stroke();c.textAlign='center';c.fillText(tickText(xv,xmax),px,H-M.b+13);const yv=ymax*i/4,py=Y(yv);c.beginPath();c.moveTo(M.l,py);c.lineTo(W-M.r,py);c.stroke();c.textAlign='right';c.fillText(tickText(yv,ymax),M.l-5,py+3);}
+  c.textAlign='center';c.fillStyle='#5c5c5c';c.font='10px Segoe UI';c.fillText(mode==='energy'?'E (m)':'Fₛ (m²)',M.l+(W-M.l-M.r)/2,H-6);c.save();c.translate(11,M.t+(H-M.t-M.b)/2+12);c.rotate(-Math.PI/2);c.fillText('y (m)',0,0);c.restore();
+  c.strokeStyle='#3f3f3f';c.lineWidth=1.7;c.beginPath();let begun=false;for(let y=ymax*.006;y<=ymax;y+=ymax/500){const x=value(y);if(x>xmax)continue;begun?c.lineTo(X(x),Y(y)):(c.moveTo(X(x),Y(y)),begun=true);}c.stroke();
+  const plotted=points.map(p=>({...p,x:X(value(p.y)),py:Y(p.y)})),groups=[];
+  for(const p of plotted){let group=groups.find(g=>Math.abs(g[0].x-p.x)<4&&Math.abs(g[0].py-p.py)<4);if(!group){group=[];groups.push(group);}group.push(p);}
+  for(const group of groups)group.forEach((p,i)=>{const radius=5+2*(group.length-1-i);c.beginPath();c.arc(p.x,p.py,radius,0,Math.PI*2);c.fillStyle=POINT_COLORS[p.key];c.fill();c.strokeStyle='#fff';c.lineWidth=1.2;c.stroke();});
+  c.strokeStyle='#b8b8b8';c.lineWidth=1;c.strokeRect(M.l,M.t,W-M.l-M.r,H-M.t-M.b);c.textAlign='left';
+}
+let result=null;
+function render(){if(!result)return;drawFlume(result);drawChart('energyDiagram',result,'energy');drawChart('forceDiagram',result,'force');}
+window.addEventListener?.('resize',()=>requestAnimationFrame(render));
+invalidate();
+window.LAB={state,solve,normalDepth,criticalDepth,specific,force};
+</script>
+</body>
+</html>

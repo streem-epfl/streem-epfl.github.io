@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open Channel Flow: Geometry, Uniform Flow &amp; Froude Number</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../assets/vendor/katex/katex.min.css">
+<script defer src="../../assets/vendor/katex/katex.min.js"></script>
+<script defer src="../../assets/scripts/streem-math.js"></script>
+<style>
+  :root{
+    --bg:#f5f5f5; --panel:#ffffff; --panel2:#f0f0f0; --ink:#1d1d1b; --dim:#5c5c5c;
+    --accent:#e30613; --sub:#006d9c; --crit:#9b5b00; --sup:#e30613; --ok:#08783f; --line:#d6d6d6;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; overflow:hidden; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",system-ui,sans-serif;}
+  #c{position:absolute; inset:0; width:100%; height:100%; display:block;}
+  .panel{position:absolute; background:color-mix(in srgb, var(--panel) 92%, transparent);
+    border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+    backdrop-filter:blur(6px); font-size:13px; line-height:1.45;}
+  #ui{left:12px; top:12px; width:252px; max-height:calc(100% - 24px); overflow-y:auto;}
+  #readout{right:12px; top:12px; width:400px; max-height:calc(100% - 24px); overflow-y:auto;}
+  #views{left:50%; transform:translateX(-50%); bottom:12px; display:flex; gap:8px; padding:8px;}
+  h1{font-size:14px; margin-bottom:2px; color:var(--accent);}
+  .sub{color:var(--dim); font-size:11px; margin-bottom:10px;}
+  h2{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim);
+    margin:12px 0 6px; border-bottom:1px solid var(--line); padding-bottom:3px;}
+  label.row{display:flex; justify-content:space-between; align-items:center; margin:7px 0 2px;
+    font-size:12.5px;}
+  label.row .val{color:var(--accent); font-variant-numeric:tabular-nums; font-weight:600;}
+  input[type=range]{width:100%; accent-color:var(--accent);}
+  select{width:100%; background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:5px 6px; font-size:13px;}
+  input[type=number]{width:100%; background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:5px 6px; font:inherit;}
+  .chk{display:flex; align-items:center; gap:7px; margin:6px 0; font-size:12.5px; cursor:pointer;}
+  .chk input{accent-color:var(--accent);}
+  button{background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    border-radius:7px; padding:7px 13px; font-size:12.5px; cursor:pointer;}
+  button:hover{border-color:var(--accent); color:var(--accent);}
+  button.active{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600;}
+  .btnrow{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;}
+  .btnrow button{flex:1; padding:6px 8px; font-size:12px;}
+  table.vals{width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums;}
+  table.vals td{padding:2.5px 0; font-size:12.5px;}
+  table.vals td:first-child{color:var(--dim);}
+  table.vals td:last-child{text-align:right; font-weight:600;}
+  #regime{margin-top:8px; padding:7px 10px; border-radius:7px; text-align:center; font-weight:700;
+    font-size:13.5px; background:var(--sub); color:#fff;}
+  #slope-class{margin-top:8px; padding:6px 9px; border-radius:7px; text-align:center; font-weight:700;
+    font-size:11.5px; background:var(--sub); color:#fff;}
+  #chip{margin-top:6px; font-size:11.5px; color:var(--dim); line-height:1.4;}
+  .formula{font-family:Cambria,Georgia,serif; font-style:italic; font-size:12.5px;
+    color:#353535; background:var(--panel2); border-radius:6px; padding:7px 9px; margin-top:6px;}
+  .formula .katex-display{margin:0; overflow-x:auto; overflow-y:hidden;}
+  .note{font-size:11px; color:var(--dim); margin-top:8px;}
+  .ok{color:var(--ok);}
+  #calc-result{margin-top:8px; padding:7px 9px; border:1px solid var(--line); border-left:4px solid var(--accent);
+    background:var(--panel2); color:var(--ink); font-size:11.5px; line-height:1.4;}
+  #calc-result.error{border-left-color:var(--sup);}
+  .hidden{display:none;}
+  @media (max-width:1150px){
+    #ui{width:210px; font-size:12px;}
+    #readout{width:236px; font-size:12px;}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="ui" class="panel">
+  <h1>Open Channel Flow — 3D</h1>
+  <div class="sub">Geometry, Manning uniform flow, velocity distribution &amp; Froude number</div>
+
+  <h2>Channel shape</h2>
+  <select id="shape">
+    <option value="trap" selected>Trapezoidal</option>
+    <option value="rect">Rectangular</option>
+    <option value="tri">Triangular</option>
+    <option value="circ">Circular (culvert, partially full)</option>
+  </select>
+
+  <h2>Geometry</h2>
+  <div id="ctl-b">
+    <label for="s-b" class="row">Bottom width b <span class="val" id="v-b"></span></label>
+    <input type="range" id="s-b" min="0.5" max="8" step="0.1" value="3">
+  </div>
+  <div id="ctl-m">
+    <label for="s-m" class="row">Side slope m (mH:1V) <span class="val" id="v-m"></span></label>
+    <input type="range" id="s-m" min="0.25" max="3" step="0.05" value="1.5">
+  </div>
+  <div id="ctl-d">
+    <label for="s-d" class="row">Diameter d <span class="val" id="v-d"></span></label>
+    <input type="range" id="s-d" min="1" max="4" step="0.1" value="2.5">
+  </div>
+  <div>
+    <label for="s-y" class="row">Flow depth y <span class="val" id="v-y"></span></label>
+    <input type="range" id="s-y" min="0.1" max="4" step="0.05" value="1.2">
+  </div>
+  <div>
+    <label for="s-S0" class="row">Bed slope S₀ <span class="val" id="v-S0"></span></label>
+    <input type="range" id="s-S0" min="0" max="0.06" step="0.001" value="0.01">
+  </div>
+
+  <h2>Flow</h2>
+  <div>
+    <label for="s-V" class="row">Mean velocity V <span class="val" id="v-V"></span></label>
+    <input type="range" id="s-V" min="0.1" max="8" step="0.05" value="1">
+  </div>
+
+  <h2>Uniform flow (Manning)</h2>
+  <select id="mat" aria-label="Manning roughness preset">
+    <option value="0.010">Glass / PVC — n = 0.010</option>
+    <option value="0.012">Finished concrete — n = 0.012</option>
+    <option value="0.013" selected>Concrete — n = 0.013</option>
+    <option value="0.015">Brickwork — n = 0.015</option>
+    <option value="0.022">Clean earth channel — n = 0.022</option>
+    <option value="0.025">Gravel bed — n = 0.025</option>
+    <option value="0.030">Earth with weeds — n = 0.030</option>
+    <option value="0.035">Natural stream — n = 0.035</option>
+    <option value="custom">Custom n</option>
+  </select>
+  <label for="s-n" class="row">Manning n <span class="val" id="v-n"></span></label>
+  <input type="range" id="s-n" min="0.010" max="0.040" step="0.001" value="0.013">
+  <div class="note">In SI units, <span data-tex="n=\frac{1}{K_s}"></span>: Manning <i>n</i> is the inverse of the Strickler coefficient.</div>
+
+  <h2>Flow calculator</h2>
+  <label for="solve-for" class="row">Solve for</label>
+  <select id="solve-for">
+    <option value="q" selected>Discharge Q</option>
+    <option value="v">Mean velocity V</option>
+    <option value="y">Flow depth y</option>
+    <option value="normal">Normal depth yₙ (Manning)</option>
+  </select>
+  <div id="ctl-Q" class="hidden">
+    <label for="i-Q" class="row">Known discharge Q</label>
+    <input type="number" id="i-Q" min="0.001" step="0.01" value="5.76" inputmode="decimal">
+  </div>
+  <div class="note" id="calc-note">Uses continuity to relate discharge, velocity and area. Enter the other known values with the controls above.</div>
+  <label class="row" style="margin-top:8px">Velocity profile model</label>
+  <select id="profile">
+    <option value="power" selected>1/7-power law (turbulent)</option>
+    <option value="linear">Linear u = uₘ·(y/D)  — worked example</option>
+    <option value="uniform">Uniform (plug, α = β = 1)</option>
+  </select>
+
+  <h2>Show</h2>
+  <label class="chk"><input type="checkbox" id="t-xs" checked> Cross-section slice + dimensions</label>
+  <label class="chk"><input type="checkbox" id="t-prof" checked> Velocity profile arrows</label>
+  <label class="chk"><input type="checkbox" id="t-part" checked> Surface drift particles</label>
+  <label class="chk"><input type="checkbox" id="t-stone"> Throw stones (wave / Froude demo)</label>
+
+  <h2>Worked examples</h2>
+  <div class="btnrow">
+    <button id="b-ex1">Example 1 (geometry)</button>
+    <button id="b-ex3">Example 3 (waves)</button>
+  </div>
+
+  <div class="note"><b>Aha demo:</b> press <i>Example 3 (waves)</i>, switch to the
+  <i>Plan</i> view and watch the ripples: their leading edge fights upstream at
+  c − V = 2.93 m/s — downstream can send "news" upstream, so the flow is
+  downstream-controlled. Now slide V up past c = 4.43 m/s: the circles fold into a
+  <b>Froude wedge</b> of half-angle sin θ = 1/Fr — the open-channel Mach cone. No
+  information travels upstream any more: the flow has gone supercritical.</div>
+</div>
+
+<div id="readout" class="panel">
+  <h2 style="margin-top:0">Geometry elements</h2>
+  <table class="vals">
+    <tr><td>Flow area A</td><td id="o-A"></td></tr>
+    <tr><td>Wetted perimeter P</td><td id="o-P"></td></tr>
+    <tr><td>Hydraulic radius R = A/P</td><td id="o-R"></td></tr>
+    <tr><td>Top width T</td><td id="o-T"></td></tr>
+    <tr><td>Hydraulic depth D = A/T</td><td id="o-D"></td></tr>
+  </table>
+  <div class="formula" id="o-formula"></div>
+
+  <h2>Velocity distribution (checks itself)</h2>
+  <table class="vals">
+    <tr><td>Surface velocity uₛ</td><td id="o-us"></td></tr>
+    <tr><td>∫u dA ÷ (V·A)</td><td id="o-chk"></td></tr>
+    <tr><td>β = ∫u²dA / V²A</td><td id="o-beta"></td></tr>
+    <tr><td>α = ∫u³dA / V³A</td><td id="o-alpha"></td></tr>
+  </table>
+  <div class="formula" id="o-profFormula"></div>
+
+  <h2>Flow &amp; regime</h2>
+  <table class="vals">
+    <tr><td>Discharge Q = V·A</td><td id="o-Q"></td></tr>
+    <tr><td>Reynolds Re = VR/ν</td><td id="o-Re"></td></tr>
+    <tr><td>Wave celerity c = √(gD)</td><td id="o-c"></td></tr>
+    <tr><td>Wave speed downstream V+c</td><td id="o-vpc"></td></tr>
+    <tr><td>Wave speed upstream V−c</td><td id="o-vmc"></td></tr>
+    <tr><td>Froude number Fr = V/√(gD)</td><td id="o-Fr"></td></tr>
+    <tr><td>Froude wedge ½-angle θ</td><td id="o-theta"></td></tr>
+  </table>
+  <div id="regime">SUBCRITICAL</div>
+  <div id="calc-result"></div>
+  <div id="chip"></div>
+
+  <h2>Uniform-flow reference</h2>
+  <table class="vals">
+    <tr><td>Normal depth y<sub>n</sub> (Manning)</td><td id="o-yn"></td></tr>
+    <tr><td>Critical depth y<sub>c</sub> (Fr = 1)</td><td id="o-yc"></td></tr>
+    <tr><td>Critical slope S<sub>c</sub></td><td id="o-Sc"></td></tr>
+    <tr><td>Friction slope S<sub>f</sub> at y<sub>n</sub></td><td id="o-Sf"></td></tr>
+    <tr><td>Bed shear τ<sub>0</sub> at y<sub>n</sub></td><td id="o-tau0"></td></tr>
+    <tr><td>Gravity drive per metre</td><td id="o-Fg"></td></tr>
+    <tr><td>Friction resistance per metre</td><td id="o-Ff"></td></tr>
+    <tr><td>Uniform-flow force balance</td><td id="o-Fbal"></td></tr>
+  </table>
+  <div id="slope-class">MANNING REFERENCE</div>
+  <div class="formula" id="o-manningFormula"></div>
+  <div class="note">The normal-depth reference uses the current discharge, bed slope and roughness. Critical depth depends on discharge and geometry only. At normal depth, the force-balance ratio is one.</div>
+  <div class="note">Water body and channel are drawn to true scale (no exaggeration). The translucent
+  water-surface layer carries the surface shimmer and drift particles; flow regime is shown in the
+  <i>Flow &amp; regime</i> panel.
+  Ripple <i>speeds</i> are exact — radius grows at c while the centre is carried at V;
+  ripple amplitude and the faint surface shimmer are cosmetic. α, β above are computed
+  by numerical integration of the chosen profile — for the linear profile they return
+  the classic linear-profile values α = 2, β = 4/3 exactly.</div>
+</div>
+
+<div id="views" class="panel">
+  <button id="b-3d" class="active">3D view</button>
+  <button id="b-xs">Cross-section</button>
+  <button id="b-plan">Plan (wave demo)</button>
+  <button id="b-pause">⏸ Pause</button>
+</div>
+
+<!-- Physics layer — a classic script, so every binding below lives in the global scope
+     and can be exercised directly: by the verification suite at machine precision, and
+     by anyone inspecting the model from the browser console. Nothing here needs
+     Three.js, so it is deliberately kept out of the rendering module that follows. -->
+<script>
+'use strict';
+/* ---------------- constants & state ---------------- */
+function labelReadoutMath(rowIndex, text, tex){
+  const cell=document.querySelectorAll('#readout table.vals tr')[rowIndex]?.firstElementChild;
+  if(!cell) return;
+  cell.replaceChildren(document.createTextNode(text));
+  const math=document.createElement('span');
+  math.dataset.tex=tex;
+  cell.append(math);
+}
+labelReadoutMath(2, 'Hydraulic radius ', String.raw`R=\frac{A}{P}`);
+labelReadoutMath(4, 'Hydraulic depth ', String.raw`D=\frac{A}{T}`);
+labelReadoutMath(6, '', String.raw`\frac{\int_A u\,dA}{VA}`);
+labelReadoutMath(7, '', String.raw`\beta=\frac{\int_Au^2\,dA}{V^2A}`);
+labelReadoutMath(8, '', String.raw`\alpha=\frac{\int_Au^3\,dA}{V^3A}`);
+labelReadoutMath(9, 'Discharge ', String.raw`Q=VA`);
+labelReadoutMath(10, 'Reynolds ', String.raw`Re=\frac{VR}{\nu}`);
+labelReadoutMath(11, 'Wave celerity ', String.raw`c=\sqrt{gD}`);
+labelReadoutMath(14, 'Froude number ', String.raw`Fr=\frac{V}{\sqrt{gD}}`);
+labelReadoutMath(15, 'Froude wedge half-angle ', String.raw`\theta`);
+labelReadoutMath(16, 'Normal depth ', String.raw`y_n`);
+labelReadoutMath(17, 'Critical depth ', String.raw`y_c\quad(Fr=1)`);
+labelReadoutMath(18, 'Critical slope ', String.raw`S_c`);
+labelReadoutMath(19, 'Friction slope ', String.raw`S_f\quad\text{at }y_n`);
+labelReadoutMath(20, 'Bed shear ', String.raw`\tau_0\quad\text{at }y_n`);
+labelReadoutMath(21, 'Gravity drive ', String.raw`\rho g A S_0`);
+labelReadoutMath(22, 'Friction resistance ', String.raw`\tau_0P`);
+labelReadoutMath(23, 'Force balance ', String.raw`\frac{\tau_0P}{\rho g A S_0}`);
+const G = 9.81;          // m/s²
+const NU = 1e-6;         // kinematic viscosity of water (m²/s), 20 °C
+const L = 20;            // channel reach length shown (m)
+const XS = L * 0.55;     // x-station of the cross-section slice (m)
+const STONE_X = 6;       // stone drop station (m)
+
+const state = {
+  shape:'trap', b:3, m:1.5, y:1.2, d:2.5, S0:0.01, V:1, Q:5.76, solveFor:'q', calcError:'', profile:'power', n:0.013,
+  showXS:true, showProf:true, showPart:true, stones:false, paused:false
+};
+
+const clamp = (v,a,b)=>Math.min(b,Math.max(a,v));
+const f2 = v=>v.toFixed(2), f3 = v=>v.toFixed(3);
+const fSlope = v=>v<0.001 ? v.toExponential(2) : v.toFixed(4);
+const sci = v=>{ const e=Math.floor(Math.log10(v)), m=v/10**e;
+  return m.toFixed(1)+'×10'+String(e).replace(/\d/g, d=>'⁰¹²³⁴⁵⁶⁷⁸⁹'[d]); };
+
+/* ---------------- hydraulics (exact formulas, Chow) ---------------- */
+function hydraulics(s){
+  let A,P,T;
+  if (s.shape==='rect'){ A=s.b*s.y; P=s.b+2*s.y; T=s.b; }
+  else if (s.shape==='trap'){ A=(s.b+s.m*s.y)*s.y; P=s.b+2*s.y*Math.sqrt(1+s.m*s.m); T=s.b+2*s.m*s.y; }
+  else if (s.shape==='tri'){ A=s.m*s.y*s.y; P=2*s.y*Math.sqrt(1+s.m*s.m); T=2*s.m*s.y; }
+  else { // circular, partially full
+    const r=s.d/2, th=2*Math.acos(clamp(1-2*s.y/s.d,-1,1));
+    A=r*r*0.5*(th-Math.sin(th)); P=r*th; T=s.d*Math.sin(th/2);
+  }
+  const R=A/P, D=A/T, c=Math.sqrt(G*D), Fr=s.V/c, Q=s.V*A, Re=s.V*R/NU;
+  return {A,P,T,R,D,c,Fr,Q,Re};
+}
+
+/* ---------------- continuity calculator: Q = V A ---------------- */
+function areaAtDepth(s, y){ return hydraulics({...s, y, V:1}).A; }
+
+function solveDepthForArea(s, targetA){
+  const eps = 1e-6;
+  if (!(targetA > 0)) return {y:eps};
+  let lo = eps;
+  let hi = s.shape==='circ' ? 0.95*s.d : Math.max(4, s.y);
+  if (s.shape!=='circ'){
+    while (areaAtDepth(s, hi) < targetA && hi < 100) hi *= 2;
+  }
+  if (areaAtDepth(s, hi) < targetA) return {error:'The entered Q and V exceed the displayed section capacity.'};
+  for (let i=0;i<70;i++){
+    const mid = (lo+hi)/2;
+    if (areaAtDepth(s, mid) < targetA) lo=mid; else hi=mid;
+  }
+  return {y:(lo+hi)/2};
+}
+
+/* ---------------- uniform flow: Manning / Strickler ---------------- */
+function manningDischarge(s, y){
+  if (!(s.S0>0) || !(s.n>0)) return 0;
+  const section=hydraulics({...s, y, V:1});
+  return section.A*Math.pow(section.R,2/3)*Math.sqrt(s.S0)/s.n;
+}
+
+function solveNormalDepth(s, Q){
+  if (!(Q>0)) return {error:'Enter a positive discharge to solve normal depth.'};
+  if (!(s.S0>0)) return {error:'Normal depth requires a positive bed slope S₀.'};
+  let lo=1e-6, hi=s.shape==='circ' ? 0.95*s.d : Math.max(4,s.y);
+  if (s.shape!=='circ') while(manningDischarge(s,hi)<Q && hi<100) hi*=2;
+  if (manningDischarge(s,hi)<Q)
+    return {error:'The Manning discharge exceeds this section’s displayed capacity.'};
+  for(let i=0;i<70;i++){
+    const mid=(lo+hi)/2;
+    if(manningDischarge(s,mid)<Q) lo=mid; else hi=mid;
+  }
+  return {y:(lo+hi)/2};
+}
+
+function solveCriticalDepth(s, Q){
+  if (!(Q>0)) return {error:'Enter a positive discharge to solve critical depth.'};
+  const criticality=y=>{
+    const section=hydraulics({...s,y,V:1});
+    return Q*Q*section.T/(G*Math.pow(section.A,3));
+  };
+  let lo=1e-6, hi=s.shape==='circ' ? 0.95*s.d : Math.max(4,s.y);
+  if(s.shape!=='circ') while(criticality(hi)>1 && hi<100) hi*=2;
+  if(criticality(hi)>1) return {error:'Critical depth exceeds this section’s displayed capacity.'};
+  for(let i=0;i<70;i++){
+    const mid=(lo+hi)/2;
+    if(criticality(mid)>1) lo=mid; else hi=mid;
+  }
+  return {y:(lo+hi)/2};
+}
+
+function uniformReference(s, Q){
+  const normal=solveNormalDepth(s,Q), critical=solveCriticalDepth(s,Q);
+  const out={yn:normal.y, yc:critical.y, normalError:normal.error, criticalError:critical.error};
+  if(normal.y!==undefined){
+    const section=hydraulics({...s,y:normal.y,V:1});
+    const V=Q/section.A;
+    out.Vn=V;
+    out.Sf=s.n*s.n*V*V/Math.pow(section.R,4/3);
+    out.tau0=1000*G*section.R*out.Sf;
+    out.Fg=1000*G*section.A*s.S0;
+    out.Ff=out.tau0*section.P;
+    out.forceBalance=out.Ff/out.Fg;
+  }
+  if(critical.y!==undefined){
+    const section=hydraulics({...s,y:critical.y,V:1});
+    out.Sc=Math.pow(s.n*Q/(section.A*Math.pow(section.R,2/3)),2);
+  }
+  return out;
+}
+
+function syncDepthControl(){
+  const el = document.getElementById('s-y');
+  const maxY = state.shape==='circ' ? 0.95*state.d : Math.max(4, Math.ceil((state.y+0.5)*2)/2);
+  el.max = maxY.toFixed(2);
+  el.value = state.y;
+  document.getElementById('v-y').textContent = f2(state.y)+' m';
+}
+
+function syncVelocityControl(){
+  const el = document.getElementById('s-V');
+  const minV = Math.min(0.1, Math.max(0.001, state.V*0.5));
+  const maxV = Math.max(8, Math.ceil((state.V+0.5)*2)/2);
+  el.min = minV.toFixed(3);
+  el.max = maxV.toFixed(2);
+  el.value = state.V;
+  document.getElementById('v-V').textContent = f2(state.V)+' m/s';
+}
+
+function resolveCalculator(){
+  state.calcError = '';
+  if (state.solveFor==='q'){
+    state.Q = state.V*areaAtDepth(state, state.y);
+  } else if (state.solveFor==='v'){
+    const A = areaAtDepth(state, state.y);
+    state.V = state.Q/A;
+  } else if (state.solveFor==='y') {
+    const result = solveDepthForArea(state, state.Q/state.V);
+    if (result.error) state.calcError = result.error;
+    else state.y = result.y;
+  } else {
+    const result=solveNormalDepth(state,state.Q);
+    if(result.error) state.calcError=result.error;
+    else {
+      state.y=result.y;
+      state.V=state.Q/areaAtDepth(state,state.y);
+    }
+  }
+  const qInput = document.getElementById('i-Q');
+  if (document.activeElement!==qInput) qInput.value = Number.isFinite(state.Q) ? state.Q.toFixed(3) : '';
+}
+
+const bedElev = x => -state.S0 * x;               // bed elevation relative to x = 0
+const surfElev = x => state.y + bedElev(x);       // water surface (uniform flow)
+
+/* ---------- velocity profile models: u(ξ), ξ = y/D ∈ [0,1] ---------- */
+/* Each has depth-average exactly V; α, β are integrated numerically (Simpson). */
+const PROFILES = {
+  power:  { u: xi => (8/7)*Math.pow(xi, 1/7), us: 8/7,
+            alpha: 512/490, beta: 64/63,
+            label: 'u(ξ) = (8/7)·V·ξ^(1/7)   (analytic α = 512/490, β = 64/63)' },
+  linear: { u: xi => 2*xi, us: 2,
+            alpha: 2, beta: 4/3,
+            label: 'u(ξ) = 2V·ξ = uₘ·(y/D), uₘ = 2V   (worked example: α = 2, β = 4/3)' },
+  uniform:{ u: () => 1, us: 1,
+            alpha: 1, beta: 1,
+            label: 'u(ξ) = V   (plug flow: α = β = 1 by definition)' }
+};
+const PROFILE_TEX = {
+  power: String.raw`u(\xi)=\frac{8}{7}V\xi^{1/7},\qquad \alpha=\frac{512}{490},\quad \beta=\frac{64}{63}`,
+  linear: String.raw`u(\xi)=2V\xi=u_s\frac{y}{D},\qquad u_s=2V,\quad \alpha=2,\quad \beta=\frac{4}{3}`,
+  uniform: String.raw`u(\xi)=V,\qquad \alpha=\beta=1`
+};
+function profileIntegrals(name){          // Simpson's rule, n = 400 panels
+  const u = PROFILES[name].u, n = 400;
+  let s1=0, s2=0, s3=0;
+  for (let i=0;i<=n;i++){
+    const w = (i===0||i===n) ? 1 : (i%2 ? 4 : 2);
+    const v = u(i/n);
+    s1 += w*v; s2 += w*v*v; s3 += w*v*v*v;
+  }
+  const h = 1/(3*n);
+  return { mean:s1*h, beta:s2*h, alpha:s3*h };   // normalized by V, V², V³
+}
+
+/* the rendering layer continues in the script below, which reads the bindings above */
+</script>
+
+<!-- Three.js r160, vendored under animations/vendor/three/ rather than loaded from a CDN
+     so this laboratory runs with no network connection like the other seven. Loaded as
+     CLASSIC scripts, not ES modules: browsers block module imports from a file:// origin
+     under CORS, so an ES-module build would fail the moment the .html is opened straight
+     from disk — which is how most students will use it. Both files attach to the global
+     THREE. See animations/vendor/three/README.md for provenance and how to update. -->
+<script src="./vendor/three/three.min.js"></script>
+<script src="./vendor/three/OrbitControls.js"></script>
+
+<!-- Rendering layer. Also a classic script, so it runs in order after the two above and
+     can see the physics bindings declared earlier. -->
+<script>
+'use strict';
+const OrbitControls = THREE.OrbitControls;
+
+/* ---------------- three.js scaffold ---------------- */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf5f5f5);
+scene.fog = new THREE.Fog(0xf5f5f5, 55, 110);
+
+const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 300);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const sun = new THREE.DirectionalLight(0xffffff, 1.15);
+sun.position.set(-12, 24, 14);
+scene.add(sun);
+
+let hyd = hydraulics(state);
+const WATER_SURFACE_TINT = 0x89d2eb;
+
+/* Plan view looks straight down: the cross-section slice labels and profile arrows all
+   collapse onto one spot (their height separation vanishes), so hide them there. */
+let curView = '3d';
+function applyVisibility(){
+  if (xsG)      xsG.visible      = state.showXS   && curView!=='plan';
+  if (profileG) profileG.visible = state.showProf && curView!=='plan';
+}
+
+function setView(which){
+  curView = which;
+  applyVisibility();
+  document.querySelectorAll('#views button').forEach(b=>b.classList.remove('active'));
+  if (state.paused) document.getElementById('b-pause').classList.add('active');
+  if (which==='3d'){
+    camera.position.set(-9, 8+hyd.T*0.35, 14+hyd.T*0.8);
+    controls.target.set(L*0.45, 0, 0);
+    document.getElementById('b-3d').classList.add('active');
+  }
+  if (which==='xs'){
+    camera.position.set(XS+9+hyd.T*1.5, bedElev(XS)+state.y+1.2, 0.001);
+    controls.target.set(XS, bedElev(XS)+state.y*0.45, 0);
+    document.getElementById('b-xs').classList.add('active');
+  }
+  if (which==='plan'){
+    camera.position.set(L/2, 26, 0.01);   // whole reach in frame, straight down
+    controls.target.set(L/2, 0, 0);
+    document.getElementById('b-plan').classList.add('active');
+  }
+}
+document.getElementById('b-3d').onclick   = ()=>setView('3d');
+document.getElementById('b-xs').onclick   = ()=>setView('xs');
+document.getElementById('b-plan').onclick = ()=>setView('plan');
+document.getElementById('b-pause').onclick = ()=>{
+  state.paused = !state.paused;
+  document.getElementById('b-pause').classList.toggle('active', state.paused);
+};
+
+/* ---------------- text label sprites ---------------- */
+/* Vertical pitch of the centre-line label stack, in world units. Label sprites are sized
+   in world units and so keep a fixed pixel size while the section itself shrinks, which
+   means offsets tuned at one geometry collapse into each other at another. This is the
+   floor: a little over one label height (0.48 world units at 26 px). Bank offsets scale
+   with T on top of their own floors. */
+const XS_GAP = 0.62;
+
+function makeLabel(text, color='#1d1d1b', px=30){
+  const cv = document.createElement('canvas');
+  const ctx = cv.getContext('2d');
+  const padX=5, padY=4;
+  ctx.font = `600 ${px}px "Segoe UI", sans-serif`;
+  const w = Math.ceil(ctx.measureText(text).width)+2*padX;
+  cv.width = w; cv.height = px+2*padY;
+  const c2 = cv.getContext('2d');
+  c2.font = `600 ${px}px "Segoe UI", sans-serif`;
+  c2.beginPath(); c2.roundRect(1, 1, cv.width-2, cv.height-2, 5);
+  c2.fillStyle = 'rgba(255,255,255,.96)'; c2.fill();
+  c2.strokeStyle = '#1d1d1b'; c2.lineWidth = 1; c2.stroke();
+  c2.fillStyle = '#1d1d1b'; c2.textBaseline='middle';
+  c2.fillText(text, padX, cv.height/2);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 4;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, depthTest:false, transparent:true}));
+  const S = 0.011;
+  sp.scale.set(cv.width*S, cv.height*S, 1);
+  sp.userData.text = text;      // lets the label-overlap test name what collided
+  return sp;
+}
+
+/* ---------------- cross-section outlines ---------------- */
+const wallH = ()=> Math.max(2.6, state.y+0.5);   // lining height follows the deepest flow
+// Channel boundary polyline [(z, h)] left bank top -> bed -> right bank top
+function channelPolyline(s){
+  const W = wallH();
+  if (s.shape==='rect') return [[-s.b/2,W],[-s.b/2,0],[s.b/2,0],[s.b/2,W]];
+  if (s.shape==='trap') return [[-s.b/2-s.m*W,W],[-s.b/2,0],[s.b/2,0],[s.b/2+s.m*W,W]];
+  if (s.shape==='tri')  return [[-s.m*W,W],[0,0],[s.m*W,W]];
+  return null; // circular handled as cylinder
+}
+// Wetted (water) polygon [(z, h)], closed
+function waterPolygon(s){
+  if (s.shape==='rect') return [[-s.b/2,0],[s.b/2,0],[s.b/2,s.y],[-s.b/2,s.y]];
+  if (s.shape==='trap') return [[-s.b/2,0],[s.b/2,0],[s.b/2+s.m*s.y,s.y],[-s.b/2-s.m*s.y,s.y]];
+  if (s.shape==='tri')  return [[0,0],[s.m*s.y,s.y],[-s.m*s.y,s.y]];
+  const r=s.d/2, pw=Math.acos(clamp(1-2*s.y/s.d,-1,1)), pts=[];
+  for(let i=0;i<=48;i++){ const p=-pw+2*pw*i/48; pts.push([r*Math.sin(p), r*(1-Math.cos(p))]); }
+  return pts; // arc from left-surface down around to right-surface; closes along the chord
+}
+
+/* ---------------- static scene build ---------------- */
+let staticG = null, waterMesh = null, surfGeo = null, surfMesh = null;
+let profileG = null, xsG = null, wedgeG = null, frontLine = null, frontLabel = null;
+
+function stripMesh(pts, color, opacity=1){
+  // extrude a polyline along x from 0..L, with bed-slope shear
+  const n = pts.length, pos = [], idx = [];
+  for (const X of [0, L]) for (const [z,h] of pts) pos.push(X, h + bedElev(X), z);
+  for (let i=0;i<n-1;i++) idx.push(i,i+1,n+i, i+1,n+i+1,n+i);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+    color, side:THREE.DoubleSide, transparent:opacity<1, opacity,
+    roughness:.95, metalness:0}));
+}
+
+function buildStatic(){
+  if (staticG){ scene.remove(staticG); staticG.traverse(o=>{o.geometry?.dispose(); o.material?.dispose?.();}); }
+  staticG = new THREE.Group(); scene.add(staticG);
+  hyd = hydraulics(state);
+  const s = state;
+
+  /* --- channel body --- */
+  if (s.shape==='circ'){
+    const r = s.d/2;
+    const slopeLength = L*Math.sqrt(1+s.S0*s.S0);
+    const cyl = new THREE.Mesh(
+      new THREE.CylinderGeometry(r*1.02, r*1.02, slopeLength, 48, 1, true),
+      new THREE.MeshStandardMaterial({color:0xb5b9bf, side:THREE.DoubleSide,
+        transparent:true, opacity:0.35, roughness:.9}));
+    // CylinderGeometry is initially aligned to local y.  The minus sign makes its
+    // centreline descend as x increases, matching bedElev(x) and the water mesh.
+    cyl.rotation.z = Math.PI/2 - Math.atan(s.S0);
+    cyl.position.set(L/2, r + bedElev(L/2), 0);
+    staticG.add(cyl);
+  } else {
+    staticG.add(stripMesh(channelPolyline(s), 0xbcb8b2));      // concrete lining
+    const topZ = channelPolyline(s)[0][0];                     // left bank-top z (<0)
+    const W = wallH();
+    staticG.add(stripMesh([[topZ-7,W],[topZ,W]], 0xaab99c));   // left ground
+    staticG.add(stripMesh([[-topZ,W],[-topZ+7,W]], 0xaab99c)); // right ground
+  }
+
+  /* --- water body (extruded wetted polygon, sheared to bed slope) --- */
+  const poly = waterPolygon(s);
+  const shp = new THREE.Shape(poly.map(p=>new THREE.Vector2(p[0],p[1])));
+  const wg = new THREE.ExtrudeGeometry(shp, {depth:L, bevelEnabled:false});
+  wg.rotateY(Math.PI/2);                                   // extrusion axis -> world x
+  { const a = wg.attributes.position;
+    for (let i=0;i<a.count;i++) a.setY(i, a.getY(i) - 0.02 + bedElev(a.getX(i)));
+    a.needsUpdate = true; wg.computeVertexNormals(); }
+  waterMesh = new THREE.Mesh(wg, new THREE.MeshPhysicalMaterial({
+    color:0x66bfe3, transparent:true, opacity:0.55, roughness:0.25, side:THREE.DoubleSide}));
+  staticG.add(waterMesh);
+
+  /* --- animated free surface: the mesh carries ripples and particles.  Its water
+     colour stays constant; the textual regime badge is the unambiguous Fr indicator. */
+  surfGeo = new THREE.PlaneGeometry(L, hyd.T*0.995, 100, 12);
+  surfGeo.rotateX(-Math.PI/2);
+  surfMesh = new THREE.Mesh(surfGeo, new THREE.MeshPhysicalMaterial({
+    color:WATER_SURFACE_TINT, transparent:true, opacity:0.65, roughness:0.15,
+    side:THREE.DoubleSide}));
+  surfMesh.position.x = L/2;
+  staticG.add(surfMesh);
+
+  /* --- longitudinal slope reference --- */
+  const dashMat = new THREE.LineDashedMaterial({color:0x6b6b6b, dashSize:.35, gapSize:.22});
+  const slopeRefZ = -(hyd.T/2+0.02);
+  const slopeRef = new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+    [new THREE.Vector3(0,bedElev(0)-0.02,slopeRefZ), new THREE.Vector3(L,bedElev(L)-0.02,slopeRefZ)]), dashMat);
+  slopeRef.computeLineDistances(); staticG.add(slopeRef);
+
+  /* The slope annotation joins the bottom of the centre-line label stack (T, b, P, S₀)
+     rather than floating out over a bank. That placement is safe by construction: every
+     label in the stack sits at the same station and the same z, so perspective maps them
+     to one screen column with their world-space gaps preserved in order. Floating it over
+     a bank instead — which earlier versions did — put it in a different plane from the
+     section labels, and the projection then slid it onto whichever of them happened to
+     line up at a given T and y; the short side-slope label m disappeared under it
+     completely. tests/software/label-layout.spec.mjs pins this down across the range. */
+  const sl = makeLabel(`S₀ = ${state.S0.toFixed(3)}  (drop ${(state.S0*L).toFixed(2)} m over ${L} m)`, '#1d1d1b', 26);
+  sl.position.set(XS, bedElev(XS)-XS_GAP*3.3, 0);
+  staticG.add(sl);
+
+  buildCrossSection();
+  buildProfile();
+  buildParticles();
+  buildWaveAnno();
+  stoneMarker.position.set(STONE_X, surfElev(STONE_X)+0.05, 0);
+  updateReadout();
+}
+
+/* --- cross-section slice with dimension annotations --- */
+function buildCrossSection(){
+  if (xsG){ staticG.remove(xsG); }
+  xsG = new THREE.Group(); staticG.add(xsG);
+  const s = state, e = bedElev(XS);
+  const poly = waterPolygon(s);
+
+  const shp = new THREE.Shape(poly.map(p=>new THREE.Vector2(p[0],p[1])));
+  const fg = new THREE.ShapeGeometry(shp); fg.rotateY(-Math.PI/2);
+  const fill = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({
+    color:0x90d5ed, transparent:true, opacity:0.53, side:THREE.DoubleSide, depthWrite:false}));
+  fill.position.set(XS, e, 0); xsG.add(fill);
+
+  // wetted-perimeter outline (bright) + surface chord
+  const wp = poly.map(([z,h])=>new THREE.Vector3(XS+0.012, h+e, -z));
+  const outl = new THREE.Line(new THREE.BufferGeometry().setFromPoints(wp),
+    new THREE.LineBasicMaterial({color:0x005a85}));
+  xsG.add(outl);
+  const chord = new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+    [wp[0], wp[wp.length-1]]), new THREE.LineBasicMaterial({color:0x005a85}));
+  xsG.add(chord);
+
+  const lab = (t,x,y,z,col='#1d1d1b',px=26)=>{ const sp=makeLabel(t,col,px); sp.position.set(x,y,z); xsG.add(sp); };
+
+  const bankZ = hyd.T/2 + Math.max(1.45, hyd.T*0.25);       // far bank, for the depth label
+  const nearZ = hyd.T/2 + Math.max(2.00, hyd.T*0.32);       // near bank, for the side slope
+
+  lab(`T = ${f2(hyd.T)} m`, XS, e+s.y+XS_GAP, 0, '#005a85');
+  lab(`y = ${f2(s.y)} m`, XS, e+s.y*0.5, -bankZ, '#1d1d1b');
+  if (s.shape==='rect'||s.shape==='trap') lab(`b = ${f2(s.b)} m`, XS, e-XS_GAP*0.75, 0, '#8a4b00');
+  if (s.shape==='trap'||s.shape==='tri') lab(`m = ${f2(s.m)}`, XS, e+s.y+XS_GAP*0.35, nearZ, '#8a4b00');
+  if (s.shape==='circ') lab(`d = ${f2(s.d)} m`, XS, e-XS_GAP*0.75, 0, '#8a4b00');
+  lab(`P (wetted perimeter) = ${f2(hyd.P)} m`, XS, e-XS_GAP*2.0, 0, '#8a4b00', 23);
+
+  // depth dimension line
+  const dl = new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+    [new THREE.Vector3(XS, e, -(hyd.T/2+0.55)), new THREE.Vector3(XS, e+s.y, -(hyd.T/2+0.55))]),
+    new THREE.LineBasicMaterial({color:0x1d1d1b}));
+  xsG.add(dl);
+  applyVisibility();
+}
+
+/* --- velocity profile arrows: u(ξ) from the chosen model --- */
+function buildProfile(){
+  if (profileG){ staticG.remove(profileG); }
+  profileG = new THREE.Group(); staticG.add(profileG);
+  const s = state, e = bedElev(XS), n = 9, tips = [];
+  const pr = PROFILES[s.profile];
+  const flowDirection = new THREE.Vector3(1, -s.S0, 0).normalize();
+  const scaleLen = 2.2 / Math.max(1.2, s.V*pr.us); // longest arrow ≈ 2.2 m on screen
+  for (let i=0;i<n;i++){
+    const xi = (i+0.6)/n;
+    const u = s.V*pr.u(xi);
+    const h = e + xi*s.y;
+    const ar = new THREE.ArrowHelper(flowDirection,
+      new THREE.Vector3(XS, h, 0), Math.max(u*scaleLen, 1e-4), 0xe30613, 0.16, 0.1);
+    profileG.add(ar);
+    tips.push(new THREE.Vector3(XS, h, 0).addScaledVector(flowDirection, u*scaleLen));
+  }
+  profileG.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(tips),
+    new THREE.LineBasicMaterial({color:0xe30613})));
+  const pl = makeLabel(pr.label.split('   ')[0] + `   α=${f2(pr.alpha)}, β=${f2(pr.beta)}`, '#b0000d', 21);
+  pl.position.set(XS-0.5, e+s.y+1.45, 0); profileG.add(pl);   // well above the T label
+  applyVisibility();
+}
+
+/* --- surface drift particles (drift at the model's surface velocity) --- */
+const NPART = 130;
+let partPts = null;
+const pu = new Float32Array(NPART), pz = new Float32Array(NPART);
+for (let i=0;i<NPART;i++){ pu[i]=Math.random()*L; pz[i]=(Math.random()*2-1)*0.9; }
+function buildParticles(){
+  if (partPts){ staticG.remove(partPts); partPts.geometry.dispose(); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(NPART*3),3));
+  partPts = new THREE.Points(g, new THREE.PointsMaterial({color:0x005a85, size:0.09}));
+  staticG.add(partPts);
+  partPts.visible = state.showPart;
+}
+
+/* --- Froude wedge (Fr>1) + upstream news front (Fr<1) annotations --- */
+function buildWaveAnno(){
+  if (wedgeG){ staticG.remove(wedgeG); }
+  wedgeG = new THREE.Group(); staticG.add(wedgeG);
+  const halfT = hyd.T/2*0.95;
+
+  if (hyd.Fr > 1){
+    // envelope of the advected circles: half-angle sin θ = c/V = 1/Fr
+    const th = Math.asin(1/hyd.Fr);
+    const sMax = Math.min(halfT/Math.sin(th), (L-STONE_X)/Math.cos(th));
+    const mat = new THREE.LineBasicMaterial({color:0x9b5b00});
+    for (const sgn of [1,-1]){
+      const pts = [];
+      for (let i=0;i<=20;i++){
+        const d = sMax*i/20;
+        const x = STONE_X + d*Math.cos(th);
+        pts.push(new THREE.Vector3(x, surfElev(x)+0.06, sgn*d*Math.sin(th)));
+      }
+      wedgeG.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+    }
+    const wl = makeLabel(
+      `Froude wedge:  sin θ = 1/Fr  →  θ = ${(th*180/Math.PI).toFixed(1)}°`, '#9b5b00', 26);
+    const xw = STONE_X + sMax*0.6*Math.cos(th);
+    wl.position.set(xw, surfElev(xw)+0.5, 0);
+    wedgeG.add(wl);
+  }
+
+  // upstream news front (updated per-frame; hidden unless Fr<1 and stones on)
+  const fg = new THREE.BufferGeometry().setFromPoints(
+    [new THREE.Vector3(0,0,-halfT), new THREE.Vector3(0,0,halfT)]);
+  frontLine = new THREE.Line(fg, new THREE.LineDashedMaterial(
+    {color:0x08783f, dashSize:0.25, gapSize:0.15}));
+  frontLine.computeLineDistances();
+  frontLine.visible = false;
+  wedgeG.add(frontLine);
+  frontLabel = makeLabel(`news front ⟵ at c−V = ${f2(Math.max(hyd.c-state.V,0))} m/s`, '#08783f', 24);
+  frontLabel.visible = false;
+  wedgeG.add(frontLabel);
+}
+
+/* --- stone / ripple demo --- */
+const stoneMarker = new THREE.Mesh(new THREE.SphereGeometry(0.09),
+  new THREE.MeshBasicMaterial({color:0xe30613}));
+scene.add(stoneMarker);
+let ripples = [];   // {t0, x0, line}   (t0 in simulation time)
+const rippleG = new THREE.Group(); scene.add(rippleG);
+function spawnRipple(t){
+  const pts = [];
+  for (let i=0;i<=64;i++){ const a=i/64*2*Math.PI; pts.push(new THREE.Vector3(Math.cos(a),0,Math.sin(a))); }
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+  new THREE.LineBasicMaterial({color:0x173f55, transparent:true, opacity:0.95}));
+  rippleG.add(line);
+  ripples.push({t0:t, x0:STONE_X, line});
+}
+function clearRipples(){ ripples.forEach(r=>{rippleG.remove(r.line); r.line.geometry.dispose();}); ripples=[]; }
+
+/* ---------------- readout ---------------- */
+const FORMULAS = {
+  rect:'A = b·y &nbsp;&nbsp; P = b + 2y &nbsp;&nbsp; T = b',
+  trap:'A = (b + m·y)·y &nbsp;&nbsp; P = b + 2y√(1+m²) &nbsp;&nbsp; T = b + 2m·y',
+  tri:'A = m·y² &nbsp;&nbsp; P = 2y√(1+m²) &nbsp;&nbsp; T = 2m·y',
+  circ:'θ = 2·cos⁻¹(1 − 2y/d) &nbsp;&nbsp; A = (d²/8)(θ − sin θ) &nbsp;&nbsp; P = θ·d/2 &nbsp;&nbsp; T = d·sin(θ/2)'
+};
+const TEX_FORMULAS = {
+  rect: String.raw`A=by,\qquad P=b+2y,\qquad T=b`,
+  trap: String.raw`A=(b+my)y,\qquad P=b+2y\sqrt{1+m^2},\qquad T=b+2my`,
+  tri: String.raw`A=my^2,\qquad P=2y\sqrt{1+m^2},\qquad T=2my`,
+  circ: String.raw`\theta=2\cos^{-1}\!\left(1-\frac{2y}{d}\right),\quad A=\frac{d^2}{8}(\theta-\sin\theta),\quad P=\frac{\theta d}{2},\quad T=d\sin\!\left(\frac{\theta}{2}\right)`
+};
+const MANNING_TEX = String.raw`\begin{aligned}
+  V&=\frac{1}{n}R^{2/3}S_0^{1/2}=K_sR^{2/3}S_0^{1/2},\qquad n=\frac{1}{K_s}\\
+  Q&=VA,\qquad S_f=\frac{n^2V^2}{R^{4/3}},\qquad \tau_0=\rho gRS_f
+\end{aligned}`;
+function updateReadout(){
+  hyd = hydraulics(state);
+  const set=(id,t)=>document.getElementById(id).textContent=t;
+  const setH=(id,t)=>document.getElementById(id).innerHTML=t;
+  const setTex=(id,tex)=>{
+    const el=document.getElementById(id);
+    el.dataset.tex=tex; el.dataset.texDisplay='block';
+    if(window.STREEM_MATH) window.STREEM_MATH.render(el,tex,true);
+    else el.textContent=tex;
+  };
+  set('o-A', f2(hyd.A)+' m²'); set('o-P', f2(hyd.P)+' m');
+  set('o-R', f3(hyd.R)+' m'); set('o-T', f2(hyd.T)+' m'); set('o-D', f3(hyd.D)+' m');
+  setTex('o-formula', TEX_FORMULAS[state.shape]);
+
+  // velocity distribution self-check: Simpson integration vs analytic
+  const pr = PROFILES[state.profile], num = profileIntegrals(state.profile);
+  const okM = Math.abs(num.mean-1) < 2e-3;
+  const okB = Math.abs(num.beta-pr.beta)  < 2e-3;
+  const okA = Math.abs(num.alpha-pr.alpha)< 2e-3;
+  set('o-us', f2(state.V*pr.us)+' m/s');
+  setH('o-chk', num.mean.toFixed(3)+(okM?' <span class="ok">✓</span>':' ✗'));
+  setH('o-beta', num.beta.toFixed(3)+' ('+pr.beta.toFixed(3)+')'+(okB?' <span class="ok">✓</span>':' ✗'));
+  setH('o-alpha', num.alpha.toFixed(3)+' ('+pr.alpha.toFixed(3)+')'+(okA?' <span class="ok">✓</span>':' ✗'));
+  setTex('o-profFormula', PROFILE_TEX[state.profile]);
+
+  set('o-Q', f2(hyd.Q)+' m³/s');
+  const calcResult = document.getElementById('calc-result');
+  calcResult.classList.toggle('error', !!state.calcError);
+  if (state.calcError) calcResult.textContent = state.calcError;
+  else if (state.solveFor==='q') calcResult.textContent = `Calculated discharge: Q = ${f2(state.Q)} m³/s`;
+  else if (state.solveFor==='v') calcResult.textContent = `Calculated mean velocity: V = ${f2(state.V)} m/s`;
+  else if (state.solveFor==='normal') calcResult.textContent = `Calculated normal depth: y_n = ${f2(state.y)} m`;
+  else calcResult.textContent = `Calculated flow depth: y = ${f2(state.y)} m`;
+  set('o-Re', sci(hyd.Re)+(hyd.Re>2000?' (turbulent)':hyd.Re<500?' (laminar)':' (transitional)'));
+  set('o-c', f2(hyd.c)+' m/s');
+  set('o-vpc', f2(state.V+hyd.c)+' m/s');
+  const up = state.V-hyd.c;
+  set('o-vmc', f2(up)+' m/s'+(up>=0?' (cannot go upstream)':''));
+  set('o-Fr', hyd.Fr.toFixed(3));
+  set('o-theta', hyd.Fr>1 ? (Math.asin(1/hyd.Fr)*180/Math.PI).toFixed(1)+'°'
+                          : '— (only exists for Fr > 1)');
+
+  const reg = document.getElementById('regime');
+  const chip = document.getElementById('chip');
+  if (Math.abs(hyd.Fr-1) < 0.05){
+    reg.textContent='CRITICAL  (Fr ≈ 1)'; reg.style.background='var(--crit)';
+    chip.textContent='V ≈ c: ripples pile up on the spot where the stone lands — the flow carries them exactly as fast as they can swim.';
+  } else if (hyd.Fr < 1){
+    reg.textContent='SUBCRITICAL  (Fr < 1, tranquil)'; reg.style.background='var(--sub)';
+    chip.textContent=`c > V: ripples outrun the flow and reach upstream at c − V = ${f2(hyd.c-state.V)} m/s. Downstream conditions control the flow — this is why backwater exists.`;
+  } else {
+    reg.textContent='SUPERCRITICAL  (Fr > 1, rapid)'; reg.style.background='var(--sup)';
+    chip.textContent=`V > c: no wave can travel upstream — disturbances are swept into a wedge of half-angle θ = asin(1/Fr) = ${(Math.asin(1/hyd.Fr)*180/Math.PI).toFixed(1)}° (the open-channel Mach cone). Control is upstream only.`;
+  }
+  const uniform=uniformReference(state,state.Q);
+  set('o-yn', uniform.yn===undefined ? '—' : f2(uniform.yn)+' m');
+  set('o-yc', uniform.yc===undefined ? '—' : f2(uniform.yc)+' m');
+  set('o-Sc', uniform.Sc===undefined ? '—' : fSlope(uniform.Sc));
+  set('o-Sf', uniform.Sf===undefined ? '—' : fSlope(uniform.Sf));
+  set('o-tau0', uniform.tau0===undefined ? '—' : f2(uniform.tau0)+' Pa');
+  set('o-Fg', uniform.Fg===undefined ? '—' : f2(uniform.Fg)+' N/m');
+  set('o-Ff', uniform.Ff===undefined ? '—' : f2(uniform.Ff)+' N/m');
+  set('o-Fbal', uniform.forceBalance===undefined ? '—' : uniform.forceBalance.toFixed(6));
+  setTex('o-manningFormula', MANNING_TEX);
+  const slopeClass=document.getElementById('slope-class');
+  if(uniform.normalError){
+    slopeClass.textContent='NO NORMAL DEPTH — '+uniform.normalError;
+    slopeClass.style.background='var(--crit)';
+  } else if(uniform.Sc===undefined){
+    slopeClass.textContent='CRITICAL SLOPE UNAVAILABLE';
+    slopeClass.style.background='var(--crit)';
+  } else if(Math.abs(state.S0-uniform.Sc)/uniform.Sc<0.05){
+    slopeClass.textContent='CRITICAL SLOPE  (yₙ ≈ y꜀)';
+    slopeClass.style.background='var(--crit)';
+  } else if(state.S0<uniform.Sc){
+    slopeClass.textContent='MILD SLOPE  (yₙ > y꜀)';
+    slopeClass.style.background='var(--sub)';
+  } else {
+    slopeClass.textContent='STEEP SLOPE  (yₙ < y꜀)';
+    slopeClass.style.background='var(--sup)';
+  }
+  if (surfMesh) surfMesh.material.color.setHex(WATER_SURFACE_TINT);
+}
+
+/* ---------------- UI wiring ---------------- */
+function bindSlider(id, key, fmt=f2, unit=' m'){
+  const el = document.getElementById('s-'+id), out = document.getElementById('v-'+id);
+  const show = ()=> out.textContent = fmt(state[key]) + unit;
+  el.addEventListener('input', ()=>{ state[key]=parseFloat(el.value); show(); onParamChange(); });
+  show();
+}
+bindSlider('b','b'); bindSlider('m','m',f2,''); bindSlider('d','d');
+bindSlider('y','y'); bindSlider('S0','S0',f3,''); bindSlider('V','V',f2,' m/s');
+bindSlider('n','n',v=>v.toFixed(3),'');
+document.getElementById('s-n').addEventListener('input',()=>{
+  document.getElementById('mat').value='custom';
+});
+document.getElementById('mat').addEventListener('change',e=>{
+  if(e.target.value==='custom') return;
+  state.n=parseFloat(e.target.value);
+  document.getElementById('s-n').value=state.n;
+  document.getElementById('v-n').textContent=state.n.toFixed(3);
+  onParamChange();
+});
+
+function applyCalculatorMode(){
+  const mode = state.solveFor;
+  const normal=mode==='normal';
+  document.getElementById('ctl-Q').classList.toggle('hidden', mode==='q');
+  document.getElementById('s-y').disabled = mode==='y'||normal;
+  document.getElementById('s-V').disabled = mode==='v'||normal;
+  document.getElementById('calc-note').textContent = normal
+    ? 'Uses Manning uniform flow. With discharge, bed slope and roughness known, it solves normal depth and mean velocity.'
+    : 'Uses continuity. Enter the other known values with the controls above.';
+}
+document.getElementById('solve-for').addEventListener('change', e=>{
+  state.solveFor = e.target.value;
+  applyCalculatorMode(); onParamChange();
+});
+function commitKnownDischarge(){
+  const qInput = document.getElementById('i-Q');
+  const Q = parseFloat(qInput.value);
+  if (Number.isFinite(Q) && Q>0){ state.Q=Q; qInput.blur(); onParamChange(); }
+}
+document.getElementById('i-Q').addEventListener('change', commitKnownDischarge);
+document.getElementById('i-Q').addEventListener('keydown', e=>{
+  if (e.key==='Enter'){ e.preventDefault(); commitKnownDischarge(); }
+});
+applyCalculatorMode();
+
+function applyShape(){
+  document.getElementById('ctl-b').classList.toggle('hidden', state.shape==='tri'||state.shape==='circ');
+  document.getElementById('ctl-m').classList.toggle('hidden', state.shape==='rect'||state.shape==='circ');
+  document.getElementById('ctl-d').classList.toggle('hidden', state.shape!=='circ');
+}
+document.getElementById('shape').addEventListener('change', e=>{
+  state.shape = e.target.value; applyShape(); onParamChange();
+});
+applyShape();
+
+document.getElementById('profile').addEventListener('change', e=>{
+  state.profile = e.target.value; onParamChange();
+});
+
+const bindChk = (id,key,fn)=>document.getElementById(id).addEventListener('change',e=>{
+  state[key]=e.target.checked; fn?.(); });
+bindChk('t-xs','showXS', applyVisibility);
+bindChk('t-prof','showProf', applyVisibility);
+bindChk('t-part','showPart', ()=>{ partPts.visible=state.showPart; });
+bindChk('t-stone','stones', ()=>{ if(!state.stones) clearRipples(); });
+
+/* --- lecture example presets --- */
+function setSliders(vals){       // vals: {b,m,d,y,S0,V} — keep state & DOM in sync
+  for (const [k,v] of Object.entries(vals)){
+    state[k]=v;
+    const el=document.getElementById('s-'+k); if(el) el.value=v;
+  }
+  ['b','m','d'].forEach(k=>{ const o=document.getElementById('v-'+k);
+    o.textContent=f2(state[k])+(k==='m'?'':' m'); });
+  document.getElementById('v-y').textContent=f2(state.y)+' m';
+  document.getElementById('v-S0').textContent=f3(state.S0);
+  document.getElementById('v-V').textContent=f2(state.V)+' m/s';
+}
+document.getElementById('b-ex1').addEventListener('click', ()=>{
+  state.shape='trap'; document.getElementById('shape').value='trap'; applyShape();
+  setSliders({b:6, m:0.75, y:4, S0:0.06, V:1});
+  onParamChange(); setView('xs');
+});
+document.getElementById('b-ex3').addEventListener('click', ()=>{
+  state.shape='rect'; document.getElementById('shape').value='rect'; applyShape();
+  setSliders({b:3, m:0.75, y:2, S0:0.001, V:1.5});
+  state.stones=true; document.getElementById('t-stone').checked=true;
+  clearRipples(); onParamChange(); setView('plan');
+});
+
+function onParamChange(){
+  // keep depth physically inside a circular culvert
+  if (state.shape==='circ'){
+    const ymax = 0.95*state.d;
+    if (state.y > ymax){ state.y = ymax;
+      document.getElementById('s-y').value = state.y;
+      document.getElementById('v-y').textContent = f2(state.y)+' m'; }
+  }
+  resolveCalculator();
+  syncDepthControl();
+  syncVelocityControl();
+  buildStatic();
+}
+
+/* --- wave-demo kinematics: ripple radius grows at c, centre advected at V --- */
+function advanceWaves(){
+  if (state.stones && simT - lastStone > 1.1){ spawnRipple(simT); lastStone = simT; }
+  let xFront = Infinity;
+  for (let i=ripples.length-1; i>=0; i--){
+    const r = ripples[i], age = simT - r.t0;
+    const rad = hyd.c*age, cx = r.x0 + state.V*age;
+    if (rad > 9 || cx - rad > L){ rippleG.remove(r.line); r.line.geometry.dispose(); ripples.splice(i,1); continue; }
+    r.line.scale.set(rad, 1, rad);
+    r.line.position.set(cx, surfElev(cx)+0.045, 0);
+    r.line.rotation.z = -Math.atan(state.S0);
+    r.line.material.opacity = Math.max(0, 0.95 - age*0.28);
+    xFront = Math.min(xFront, cx - rad);
+  }
+  stoneMarker.visible = state.stones;
+
+  /* upstream news front: leftmost tangent of the ripple family, moves at c−V */
+  const showFront = state.stones && hyd.Fr < 0.98;
+  if (frontLine){
+    frontLine.visible = showFront && Number.isFinite(xFront);
+    frontLabel.visible = showFront;
+    if (showFront){
+      const labelX = Number.isFinite(xFront) ? clamp(xFront, 0.75, L-0.75) : STONE_X;
+      if (Number.isFinite(xFront)) frontLine.position.set(xFront, surfElev(xFront)+0.06, 0);
+      frontLabel.position.set(labelX, surfElev(labelX)+0.55, 0);
+    }
+  }
+  if (wedgeG) wedgeG.visible = state.stones || false;
+}
+
+/* ---------------- animation loop ---------------- */
+/* Pausing freezes the physics: everything advances with simulation time simT,
+   accumulated only while not paused. */
+const clock = new THREE.Clock();
+let simT = 0, lastStone = -10;
+function animate(){
+  requestAnimationFrame(animate);
+  const dtReal = Math.min(clock.getDelta(), 0.05);
+  const step = state.paused ? 0 : dtReal;
+  simT += step;
+
+  /* free surface: gentle texture ripples drifting downstream (cosmetic, small amplitude) */
+  if (surfGeo && step > 0){
+    const a = surfGeo.attributes.position;
+    const amp = Math.min(0.02, 0.035*state.y);
+    for (let i=0;i<a.count;i++){
+      const gx = a.getX(i) + L/2;                    // world x
+      a.setY(i, state.y + bedElev(gx)
+        + amp*Math.sin(3.1*gx - 2.6*simT)
+        + amp*0.5*Math.sin(5.4*gx + 1.9*a.getZ(i) - 3.9*simT));
+    }
+    a.needsUpdate = true; surfGeo.computeVertexNormals();
+  }
+
+  /* surface particles drift at the chosen profile's surface velocity */
+  if (partPts && state.showPart){
+    const a = partPts.geometry.attributes.position;
+    const us = state.V * PROFILES[state.profile].us;
+    for (let i=0;i<NPART;i++){
+      pu[i] += us*step; if (pu[i] > L) pu[i] -= L;
+      a.setXYZ(i, pu[i], surfElev(pu[i])+0.03, pz[i]*hyd.T/2*0.92);
+    }
+    a.needsUpdate = true;
+  }
+
+  advanceWaves();
+
+  controls.update();
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== w*renderer.getPixelRatio() || canvas.height !== h*renderer.getPixelRatio()){
+    renderer.setSize(w, h, false);
+    camera.aspect = w/h; camera.updateProjectionMatrix();
+  }
+  renderer.render(scene, camera);
+}
+
+buildStatic();
+setView('3d');
+renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+camera.aspect = canvas.clientWidth/canvas.clientHeight; camera.updateProjectionMatrix();
+animate();
+
+/* verification / telemetry hook (module scope is otherwise unreachable) */
+window.LAB = {
+  state, hyd:()=>hyd, simT:()=>simT, ripples:()=>ripples.length,
+  front:()=>({vis:frontLine?.visible, parentVis:frontLine?.parent?.visible,
+    pos:frontLine?.position.toArray(), inScene:!!frontLine?.parent}),
+  cam:()=>({pos:camera.position.toArray(), tgt:controls.target.toArray()}),
+  project:(x,y,z)=>{ const v=new THREE.Vector3(x,y,z).project(camera);
+    return [(v.x+1)/2*canvas.clientWidth, (1-v.y)/2*canvas.clientHeight]; },
+  rippleInfo:()=>ripples.map(r=>({pos:r.line.position.toArray(),
+    rad:r.line.scale.x, op:r.line.material.opacity})),
+  setView,
+  render:()=>{ controls.update(); renderer.render(scene, camera); },
+  tick:(dt)=>{ // advance the wave demo manually by dt seconds (verification aid)
+    simT += dt;
+    advanceWaves();
+    controls.update();
+    renderer.render(scene, camera);
+  }
+};
+</script>
+</body>
+</html>
