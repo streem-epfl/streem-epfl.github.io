@@ -175,7 +175,7 @@ function rk4(y,h,S){const k1=gvf(y,S),k2=gvf(y+h*k1/2,S),k3=gvf(y+h*k2/2,S),k4=g
 function trace(y0,x0,xEnd,S){const out=[{x:x0,y:y0}],dir=Math.sign(xEnd-x0),dx=dir*.08;let x=x0,y=y0;for(let i=0;i<1800&&dir*(xEnd-x)>1e-7;i++){const h=dir*Math.min(Math.abs(dx),Math.abs(xEnd-x));y=rk4(y,h,S);x+=h;if(!Number.isFinite(y)||y>20)break;out.push({x,y});}return out;}
 function traceTo(y0,S,target){const out=[{x:LVC,y:y0}];let x=LVC,y=y0;for(let i=0;i<2500;i++){const h=.04,next=rk4(y,h,S);if((target-y)*(target-next)<=0){const f=(target-y)/(next-y||1);x+=h*f;out.push({x,y:target});return out;}x+=h;y=next;out.push({x,y});if(x>LVC+80||y>=criticalDepth()*.999)break;}out.push({x:x+4,y:target});return out;}
 function traceTowardNormal(y0,S,target){
-  const out=[{x:LVC,y:y0}],initialGap=Math.abs(target-y0),tol=Math.max(initialGap*.012,target*2e-4,1e-6);
+  const out=[{x:LVC,y:y0}],initialGap=Math.abs(target-y0),tol=Math.max(initialGap*1e-4,target*1e-6,1e-8);
   if(initialGap<=tol){out.push({x:LVC+1,y:target});return out;}
   let x=LVC,y=y0;
   for(let i=0;i<12000&&x<LVC+220;i++){
@@ -184,8 +184,9 @@ function traceTowardNormal(y0,S,target){
       const rate=Math.max(Math.abs(gvf(y,S)),1e-9),tau=clamp(Math.abs(gap)/rate,.15,45);
       next=target-gap*Math.exp(-h/tau);nextGap=target-next;
     }
-    x+=h;y=next;out.push({x,y});if(Math.abs(nextGap)<=tol)break;
+    x+=h;y=next;out.push({x,y});if(Math.abs(nextGap)<=tol){out.push({x:x+Math.max(.25,(x-LVC)*.06),y:target});break;}
   }
+  if(Math.abs(out.at(-1).y-target)>tol)out.push({x:out.at(-1).x+Math.max(.25,(out.at(-1).x-LVC)*.06),y:target});
   return out;
 }
 function traceUpstreamM1(yGate,S,target){
@@ -396,7 +397,8 @@ function drawFlume(r){
   }else if(r.kind==='drowned'){
     roundLabel(c,'drowned hydraulic jump',X(LVC+.6),Y(ZB(LVC+.6)+downstreamNormalDisplay)+58,W,H,labels);
   }else if(r.kind==='super'){
-    roundRichLabel(c,depthRuns(r.profileType+' asymptotic approach to normal depth','n,d'),X(LVC+2),Y(ZB(LVC+2)+downstreamNormalDisplay)+65,W,H,12,labels);
+    const nearUniform=Math.abs(r.yv-r.ynd)/Math.max(r.ynd,1e-9)<.02,profileLabel=nearUniform?r.profileType+' — nearly uniform approach to normal depth':r.profileType+' asymptotic approach to normal depth';
+    roundRichLabel(c,depthRuns(profileLabel,'n,d'),X(LVC+2),Y(ZB(LVC+2)+downstreamNormalDisplay)+65,W,H,12,labels);
   }
   drawGateDetail(c,r,W,H);
   c.fillStyle='#1d1d1b';c.font='11px Segoe UI';c.fillText('upstream',X(xmin)+4,H-9);c.fillText('flow →',X(-1),H-9);c.fillText('downstream',X(xmax)-70,H-9);
