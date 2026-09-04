@@ -185,7 +185,7 @@ function traceUpstreamM1(yGate,S,target){
   let x=0,y=yGate;
   for(let i=0;i<50000&&x>-5000&&y-target>tol;i++){
     const h=-.10,gap=y-target;let next=rk4(y,h,S),nextGap=next-target;
-    if(!Number.isFinite(next)||nextGap<=0||nextGap>gap*1.002){
+    if(!Number.isFinite(next)||nextGap<=0||nextGap>=gap){
       const rate=Math.max(Math.abs(gvf(y,S)),1e-9),length=clamp(gap/rate,.25,250);
       next=target+gap*Math.exp(-Math.abs(h)/length);nextGap=next-target;
     }
@@ -316,6 +316,7 @@ function depthRuns(name,sub,suffix='',size=12){return [textRun(name+' (',size),.
 function richWidth(c,runs){let width=0;for(const run of runs){c.font=run.font;width+=c.measureText(run.text).width;}return width;}
 function drawRichRuns(c,runs,x,midY,color='#1d1d1b'){c.fillStyle=color;c.textBaseline='middle';let xx=x;for(const run of runs){c.font=run.font;c.fillText(run.text,xx,midY+(run.dy||0));xx+=c.measureText(run.text).width;}return xx;}
 function roundRichLabel(c,runs,x,y,W,H,size=12,occupied=null){const padX=5,padY=4,w=richWidth(c,runs)+2*padX,h=size+1+2*padY,box=placeLabelBox(x,y,w,h,W,H,occupied),xx=box.x,yy=box.y;c.beginPath();c.roundRect(xx,yy,w,h,5);c.fillStyle='rgba(255,255,255,.96)';c.fill();c.strokeStyle='#1d1d1b';c.lineWidth=1;c.stroke();drawRichRuns(c,runs,xx+padX,yy+h/2);}
+function roundRichLineLabel(c,runs,x,lineY,side,W,H,size=12,occupied=[]){const padX=5,padY=4,w=richWidth(c,runs)+2*padX,h=size+1+2*padY,box=placeLabelBox(x,side==='above'?lineY-h-7:lineY+7,w,h,W,H,occupied),xx=box.x,yy=box.y;c.beginPath();c.roundRect(xx,yy,w,h,5);c.fillStyle='rgba(255,255,255,.96)';c.fill();c.strokeStyle='#1d1d1b';c.lineWidth=1;c.stroke();drawRichRuns(c,runs,xx+padX,yy+h/2);}
 function polyWater(c,points,X,Y,bedFn=bed){c.beginPath();c.moveTo(X(points[0].x),Y(bedFn(points[0].x)));for(const p of points)c.lineTo(X(p.x),Y(bedFn(p.x)+p.y));c.lineTo(X(points.at(-1).x),Y(bedFn(points.at(-1).x)));c.closePath();c.fillStyle='rgba(143,211,235,.62)';c.fill();c.strokeStyle='#006d9c';c.lineWidth=1.8;c.beginPath();points.forEach((p,i)=>i?c.lineTo(X(p.x),Y(bedFn(p.x)+p.y)):c.moveTo(X(p.x),Y(bedFn(p.x)+p.y)));c.stroke();}
 function drawGateDetail(c,r,W,H){
   const iw=clamp(W*.31,185,270),ih=clamp(H*.29,118,160),ix=W-iw-18,iy=35;
@@ -337,38 +338,51 @@ function drawGateDetail(c,r,W,H){
   else roundRichLabel(c,depthRuns(r.openingClear?'gate clear: normal depth':'no M1 control: normal depth','n,u','',9),ix+42,iy+34,W,H,9);
   c.font='10px Segoe UI';c.fillStyle='#1d1d1b';c.fillText('bed-relative vertical detail',ix+10,iy+ih-4);c.restore();
 }
-function drawFlume(r){const [c,W,H]=fit($('flume'));c.clearRect(0,0,W,H);const detailW=clamp(W*.31,185,270),detailH=clamp(H*.29,118,160),labels=[{x:W-detailW-18,y:35,w:detailW,h:detailH}],xmin=-LUP,xmax=r.xEnd,ZB=x=>x<0&&r.gateActive?-state.Su*x*r.upstreamLength/LUP:bed(x),gateTop=Math.max(r.yg+.25,state.a+.18,.55),zmin=Math.min(ZB(xmax),ZB(xmin),0)-Math.max(.025,r.yc*.35),zmax=Math.max(ZB(xmin)+r.up[0].y,r.yg,gateTop)+.04;const M={l:48,r:16,t:28,b:30};const sx=(W-M.l-M.r)/(xmax-xmin),sy=(H-M.t-M.b)/(zmax-zmin),X=x=>M.l+(x-xmin)*sx,Y=z=>H-M.b-(z-zmin)*sy;
-  c.fillStyle='#5c5c5c';c.font='12px Segoe UI';c.fillText('Longitudinal flow profile',M.l,17);
-  c.textAlign='right';c.fillText(r.gateActive?'computed M1 reach compressed horizontally':'vertical scale exaggerated ×'+Math.max(1,sy/sx).toFixed(0),W-M.r,17);c.textAlign='left';
+function drawFlume(r){
+  const [c,W,H]=fit($('flume'));c.clearRect(0,0,W,H);
+  const detailW=clamp(W*.31,185,270),detailH=clamp(H*.29,118,160),labels=[{x:W-detailW-18,y:35,w:detailW,h:detailH}],xmin=-LUP,xmax=r.xEnd;
   const jet=r.gateActive?[{x:.03,y:state.a},{x:.32,y:state.a*.94},{x:LVC,y:r.yv},...r.down.slice(1)]:[{x:.03,y:r.ynu},...r.down.slice(1)];
-  const freeJump=r.kind==='immediate'||r.kind==='pushed';let downstream=r.kind==='drowned'?[{x:.03,y:r.ynd},{x:r.xEnd,y:r.ynd}]:jet;
-  if(freeJump){const rise=[];for(let i=1;i<=20;i++){const t=i/20,ease=t*t*(3-2*t);rise.push({x:r.xJump+(r.xJumpEnd-r.xJump)*t,y:r.yj+(r.ynd-r.yj)*ease});}downstream=[...jet,...rise,{x:r.xEnd,y:r.ynd}];}
-  polyWater(c,r.up,X,Y,ZB);polyWater(c,downstream,X,Y,ZB);
+  const freeJump=r.kind==='immediate'||r.kind==='pushed';let downstreamPhysical=r.kind==='drowned'?[{x:.03,y:r.ynd},{x:r.xEnd,y:r.ynd}]:jet;
+  if(freeJump){const rise=[];for(let i=1;i<=20;i++){const t=i/20,ease=t*t*(3-2*t);rise.push({x:r.xJump+(r.xJumpEnd-r.xJump)*t,y:r.yj+(r.ynd-r.yj)*ease});}downstreamPhysical=[...jet,...rise,{x:r.xEnd,y:r.ynd}];}
+  const channelLength=xmax-xmin,physicalDepths=[state.a,r.yc,r.ynu,r.ynd,r.yg,r.y2v,...r.up.map(p=>p.y),...downstreamPhysical.map(p=>p.y)].filter(v=>Number.isFinite(v)&&v>=0),maxPhysicalDepth=Math.max(...physicalDepths,1e-9);
+  const nominalMaxDisplay=channelLength/12,largeDepthRatio=Math.max(1,maxPhysicalDepth/Math.max(r.yc,1e-12)),maxDisplayDepth=nominalMaxDisplay*(1+Math.min(.20,.025*Math.log10(largeDepthRatio)));
+  const depthDenominator=Math.max(Math.asinh(maxPhysicalDepth/Math.max(r.yc,1e-12)),1e-9),depthDisplay=y=>maxDisplayDepth*Math.asinh(Math.max(y,0)/Math.max(r.yc,1e-12))/depthDenominator;
+  const upstreamNormalDisplayDepth=depthDisplay(r.ynu),gateDepthDisplay=depthDisplay(r.yg),openingDisplay=depthDisplay(state.a),criticalDepthDisplay=depthDisplay(r.yc),downstreamNormalDisplay=depthDisplay(r.ynd);
+  const physicalUpstreamBedRise=state.Su*LUP,upstreamBedRise=r.gateActive?Math.min(physicalUpstreamBedRise,Math.max(0,(gateDepthDisplay-upstreamNormalDisplayDepth)*.45)):physicalUpstreamBedRise;
+  const ZB=x=>x<0?upstreamBedRise*(-x/LUP):-state.Sd*x;
+  const upstreamSurfaceStart=ZB(-LUP)+upstreamNormalDisplayDepth,upstreamSurfaceEnd=gateDepthDisplay,m1Denominator=Math.expm1(4);
+  const upDraw=r.up.map(p=>{if(!r.gateActive)return{x:p.x,y:upstreamNormalDisplayDepth};const t=clamp((p.x+LUP)/LUP,0,1),surface=upstreamSurfaceStart+(upstreamSurfaceEnd-upstreamSurfaceStart)*Math.expm1(4*t)/m1Denominator;return{x:p.x,y:Math.max(0,surface-ZB(p.x))};});
+  const gateTop=Math.max(gateDepthDisplay+channelLength/200,openingDisplay+channelLength/250,channelLength/45);
+  const M={l:48,r:16,t:28,b:30},sx=(W-M.l-M.r)/channelLength,sy=sx,bedBaseY=clamp(H*.55,M.t+detailH+65,H-M.b-95),X=x=>M.l+(x-xmin)*sx,Y=z=>bedBaseY-z*sy;
+  const downstreamLineY=depth=>px=>{const x=clamp(xmin+(px-M.l)/sx,.05,xmax);return Y(ZB(x)+depth);};
+  c.fillStyle='#5c5c5c';c.font='12px Segoe UI';c.fillText('Longitudinal flow profile',M.l,17);
+  c.textAlign='right';c.fillText('longitudinal aspect 1:1 · maximum depth ≈ channel length / 12',W-M.r,17);c.textAlign='left';
+  const downstreamDraw=downstreamPhysical.map(p=>({x:p.x,y:depthDisplay(p.y)}));
+  polyWater(c,upDraw,X,Y,ZB);polyWater(c,downstreamDraw,X,Y,ZB);
   if(r.kind==='drowned'){
-    const core=[{x:.03,y:state.a},{x:.32,y:state.a*.94},{x:LVC,y:r.yv},{x:r.xJumpEnd,y:r.yv+(r.y2v-r.yv)*.70}];c.beginPath();c.moveTo(X(core[0].x),Y(ZB(core[0].x)));for(const p of core)c.lineTo(X(p.x),Y(ZB(p.x)+p.y));c.lineTo(X(core.at(-1).x),Y(ZB(core.at(-1).x)));c.closePath();c.fillStyle='rgba(0,109,156,.24)';c.fill();c.beginPath();core.forEach((p,i)=>i?c.lineTo(X(p.x),Y(ZB(p.x)+p.y)):c.moveTo(X(p.x),Y(ZB(p.x)+p.y)));c.strokeStyle='#006d9c';c.setLineDash([4,3]);c.lineWidth=1.4;c.stroke();c.setLineDash([]);
+    const core=[{x:.03,y:state.a},{x:.32,y:state.a*.94},{x:LVC,y:r.yv},{x:r.xJumpEnd,y:r.yv+(r.y2v-r.yv)*.70}].map(p=>({x:p.x,y:depthDisplay(p.y)}));c.beginPath();c.moveTo(X(core[0].x),Y(ZB(core[0].x)));for(const p of core)c.lineTo(X(p.x),Y(ZB(p.x)+p.y));c.lineTo(X(core.at(-1).x),Y(ZB(core.at(-1).x)));c.closePath();c.fillStyle='rgba(0,109,156,.24)';c.fill();c.beginPath();core.forEach((p,i)=>i?c.lineTo(X(p.x),Y(ZB(p.x)+p.y)):c.moveTo(X(p.x),Y(ZB(p.x)+p.y)));c.strokeStyle='#006d9c';c.setLineDash([4,3]);c.lineWidth=1.4;c.stroke();c.setLineDash([]);
   }
   c.strokeStyle='#aaa6a0';c.lineWidth=2.3;c.beginPath();for(let x=xmin;x<=xmax;x+=.05){const p=[X(x),Y(ZB(x))];x===xmin?c.moveTo(...p):c.lineTo(...p);}c.stroke();
-  if(state.yc){for(const [xa,xb] of [[xmin,-.05],[.05,xmax]]){c.strokeStyle='#9b5b00';c.setLineDash([5,4]);c.lineWidth=1;c.beginPath();c.moveTo(X(xa),Y(ZB(xa)+r.yc));c.lineTo(X(xb),Y(ZB(xb)+r.yc));c.stroke();c.setLineDash([]);}roundRichLabel(c,depthRuns('critical depth','c'),X(xmax)-100,Y(ZB(xmax)+r.yc)-58,W,H,12,labels);}
-  c.strokeStyle='#3f3f3f';c.setLineDash([6,4]);c.lineWidth=1;c.beginPath();c.moveTo(X(xmin),Y(ZB(xmin)+r.ynu));c.lineTo(X(-.05),Y(ZB(-.05)+r.ynu));c.stroke();
-  c.beginPath();c.moveTo(X(.05),Y(ZB(.05)+r.ynd));c.lineTo(X(xmax),Y(ZB(xmax)+r.ynd));c.stroke();c.setLineDash([]);roundRichLabel(c,depthRuns('downstream normal depth','n,d'),X(xmax)-210,Y(ZB(xmax)+r.ynd)+9,W,H,12,labels);
-  if(state.egl){const drawE=pts=>{c.strokeStyle='#5c257e';c.setLineDash([4,4]);c.lineWidth=1.2;c.beginPath();pts.forEach((p,i)=>{const v=section(p.y).V,py=Y(ZB(p.x)+p.y+v*v/(2*G));i?c.lineTo(X(p.x),py):c.moveTo(X(p.x),py);});c.stroke();c.setLineDash([]);};drawE(r.up);}
-  c.fillStyle='#1d1d1b';c.fillRect(X(-.11),Y(gateTop),Math.max(3,X(.11)-X(-.11)),Y(state.a)-Y(gateTop));c.strokeStyle='#1d1d1b';c.lineWidth=1;c.strokeRect(X(-.11),Y(gateTop),Math.max(3,X(.11)-X(-.11)),Y(state.a)-Y(gateTop));
-  roundLabel(c,'sluice gate',X(.20),Y(gateTop)-21,W,H,labels);
+  if(state.yc){for(const [xa,xb] of [[xmin,-.05],[.05,xmax]]){c.strokeStyle='#9b5b00';c.setLineDash([5,4]);c.lineWidth=1;c.beginPath();c.moveTo(X(xa),Y(ZB(xa)+criticalDepthDisplay));c.lineTo(X(xb),Y(ZB(xb)+criticalDepthDisplay));c.stroke();c.setLineDash([]);}roundRichLineLabel(c,depthRuns('critical depth','c'),X(xmax)-100,downstreamLineY(criticalDepthDisplay),'below',W,H,12,labels);}
+  c.strokeStyle='#3f3f3f';c.setLineDash([6,4]);c.lineWidth=1;c.beginPath();c.moveTo(X(xmin),Y(ZB(xmin)+upstreamNormalDisplayDepth));c.lineTo(X(-.05),Y(ZB(-.05)+upstreamNormalDisplayDepth));c.stroke();
+  c.beginPath();c.moveTo(X(.05),Y(ZB(.05)+downstreamNormalDisplay));c.lineTo(X(xmax),Y(ZB(xmax)+downstreamNormalDisplay));c.stroke();c.setLineDash([]);roundRichLineLabel(c,depthRuns('downstream normal depth','n,d'),X(xmax)-210,downstreamLineY(downstreamNormalDisplay),'above',W,H,12,labels);
+  if(state.egl){const drawE=pts=>{c.strokeStyle='#5c257e';c.setLineDash([4,4]);c.lineWidth=1.2;c.beginPath();pts.forEach((p,i)=>{const waterDepth=upDraw[i]?.y??depthDisplay(p.y),energyLift=Math.max(0,depthDisplay(specific(p.y))-depthDisplay(p.y)),py=Y(ZB(p.x)+waterDepth+energyLift);i?c.lineTo(X(p.x),py):c.moveTo(X(p.x),py);});c.stroke();c.setLineDash([]);};drawE(r.up);}
+  c.fillStyle='#1d1d1b';c.fillRect(X(-.11),Y(gateTop),Math.max(3,X(.11)-X(-.11)),Y(openingDisplay)-Y(gateTop));c.strokeStyle='#1d1d1b';c.lineWidth=1;c.strokeRect(X(-.11),Y(gateTop),Math.max(3,X(.11)-X(-.11)),Y(openingDisplay)-Y(gateTop));
+  roundLabel(c,'sluice gate',X(-.20)-72,34,W,H,labels);
   if(r.gateActive){
-    if(r.kind!=='drowned')roundRichLabel(c,depthRuns('vena contracta','v'),X(LVC)-30,Y(ZB(LVC)+r.yv)-30,W,H,12,labels);
-    roundRichLabel(c,depthRuns('M1 profile approaching upstream normal depth','n,u'),X(-LUP)+8,Y(ZB(-LUP)+r.ynu)-31,W,H,12,labels);
-    roundRichLabel(c,depthRuns('level at gate from energy balance','g'),X(-24),Y(r.yg)-31,W,H,12,labels);
+    if(r.kind!=='drowned')roundRichLabel(c,depthRuns('vena contracta','v'),X(LVC)-30,Y(ZB(LVC)+depthDisplay(r.yv))+12,W,H,12,labels);
+    roundRichLabel(c,depthRuns('M1 profile approaching upstream normal depth','n,u'),X(-LUP)+8,Y(ZB(-LUP)+upstreamNormalDisplayDepth)+28,W,H,12,labels);
   }else{
-    roundRichLabel(c,depthRuns('unaffected upstream normal depth','n,u'),X(-LUP)+8,Y(ZB(-LUP)+r.ynu)-31,W,H,12,labels);
-    roundLabel(c,r.openingClear?'gate clear — no hydraulic effect':'no M1 control for these inputs',X(-9),Y(r.ynu)-35,W,H,labels);
+    roundRichLabel(c,depthRuns('unaffected upstream normal depth','n,u'),X(-LUP)+8,Y(ZB(-LUP)+upstreamNormalDisplayDepth)+28,W,H,12,labels);
+    roundLabel(c,r.openingClear?'gate clear — no hydraulic effect':'no M1 control for these inputs',X(-9),Y(upstreamNormalDisplayDepth)+60,W,H,labels);
   }
   if(freeJump){
     const xj=r.xJump;
-    roundLabel(c,r.kind==='immediate'?'hydraulic jump starts at vena contracta':'hydraulic jump — schematic location',X(xj)-45,Y(ZB(xj)+r.ynd)-52,W,H,labels);
+    roundLabel(c,r.kind==='immediate'?'hydraulic jump starts at vena contracta':'hydraulic jump — schematic location',X(xj)-45,Y(ZB(xj)+downstreamNormalDisplay)+72,W,H,labels);
   }else if(r.kind==='drowned'){
-    roundLabel(c,'drowned hydraulic jump',X(LVC+.6),Y(ZB(LVC+.6)+r.ynd)-42,W,H,labels);
+    roundLabel(c,'drowned hydraulic jump',X(LVC+.6),Y(ZB(LVC+.6)+downstreamNormalDisplay)+58,W,H,labels);
   }else if(r.kind==='super'){
-    roundRichLabel(c,depthRuns(r.profileType+' asymptotic approach to normal depth','n,d'),X(LVC+5),Y(ZB(LVC+5)+Math.max(r.ynd,r.yc))-78,W,H,12,labels);
+    roundRichLabel(c,depthRuns(r.profileType+' asymptotic approach to normal depth','n,d'),X(LVC+2),Y(ZB(LVC+2)+downstreamNormalDisplay)+65,W,H,12,labels);
   }
   drawGateDetail(c,r,W,H);
   c.fillStyle='#1d1d1b';c.font='11px Segoe UI';c.fillText('upstream',X(xmin)+4,H-9);c.fillText('flow →',X(-1),H-9);c.fillText('downstream',X(xmax)-70,H-9);
