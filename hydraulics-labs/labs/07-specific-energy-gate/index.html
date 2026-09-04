@@ -67,7 +67,7 @@
   <label for="s-Su" class="row">Bed slope <span data-tex="S_{0,u}"></span> <span id="v-Su" class="val"></span></label>
   <div class="control-row"><input id="i-Su" class="manual-entry" type="number" min="0.0005" max="0.005" step="0.0001" value="0.0020" inputmode="decimal" aria-label="Upstream bed slope"></div>
   <input id="s-Su" type="range" min="0.0005" max="0.005" step="0.0001" value="0.0020">
-  <div class="note">The M1 curve is integrated upstream from <span data-tex="y_g"></span> until <span data-tex="|y-y_{n,u}|\leq0.01|y_g-y_{n,u}|"></span>. Its computed reach is compressed horizontally in the drawing.</div>
+  <div class="note">A contracted jet forms when <span data-tex="a<y_{n,u}"></span> and <span data-tex="C_ca<y_c"></span>. An upstream M1 profile is required only when <span data-tex="E(y_v)>E(y_{n,u})"></span>; otherwise the upstream flow remains at normal depth and loses the excess energy at the contraction.</div>
 
   <h2>Sluice gate</h2>
   <label for="i-a" class="row">Opening <span data-tex="a"></span></label>
@@ -96,8 +96,8 @@
     <tr><td>Channel width <span data-tex="b"></span></td><td id="o-b"></td></tr>
     <tr><td>Gate opening <span data-tex="(a)"></span></td><td id="o-a"></td></tr>
     <tr><td>Upstream normal depth <span data-tex="(y_{n,u})"></span></td><td id="o-ynu"></td></tr>
-    <tr><td>Opening condition <span data-tex="a<y_{n,u}"></span></td><td id="o-condition"></td></tr>
-    <tr><td>Energy residual <span data-tex="|E(y_g)-E(y_v)|"></span></td><td id="o-Echeck"></td></tr>
+    <tr><td>Vena-contracta condition <span data-tex="a<y_{n,u},\;C_ca<y_c"></span></td><td id="o-condition"></td></tr>
+    <tr><td>M1 energy residual <span data-tex="|E(y_g)-E(y_v)|"></span></td><td id="o-Echeck"></td></tr>
   </table>
   <div id="up-status" class="status">CHECKING GATE CONTROL</div>
 
@@ -208,11 +208,14 @@ function traceUpstreamM1(yGate,S,target){
 function solve(){
   const yc=criticalDepth(),ynu=normalDepth(state.Su),ynd=normalDepth(state.Sd),openingClear=state.a>=ynu;
   const candidateYv=CC*state.a,candidateE=specific(candidateYv),candidateYg=candidateYv<yc?rootEnergy(candidateE,'sub'):candidateYv;
-  const gateActive=!openingClear&&candidateYv<yc&&candidateYg>ynu;
-  const yv=gateActive?candidateYv:null,Ev=gateActive?candidateE:specific(ynu),yg=gateActive?candidateYg:ynu;
-  const upstream=gateActive?traceUpstreamM1(yg,state.Su,ynu):{points:[{x:-LUP,y:ynu},{x:0,y:ynu}],physicalLength:0};
+  // A vena contracta and an upstream M1 control are distinct phenomena. A
+  // constricted opening can create a supercritical jet without an M1 rise.
+  const gateActive=!openingClear&&candidateYv<yc;
+  const m1Active=gateActive&&candidateYg>ynu*(1+1e-5);
+  const yv=gateActive?candidateYv:null,Ev=gateActive?candidateE:specific(ynu),yg=m1Active?candidateYg:ynu;
+  const upstream=m1Active?traceUpstreamM1(yg,state.Su,ynu):{points:[{x:-LUP,y:ynu},{x:0,y:ynu}],physicalLength:0};
   const Frnd=section(ynd).Fr,Fn=force(ynd),Fv=gateActive?force(yv):null,y2v=gateActive?conjugate(yv):null;
-  const r={yc,ynu,ynd,yv,yg,Ev,Vv:gateActive?section(yv).V:null,Frv:gateActive?section(yv).Fr:null,up:upstream.points,upstreamLength:upstream.physicalLength,Frnd,Fv,Fn,y2v,gateActive,openingClear,kind:'uncontrolled',profileType:'—'};
+  const r={yc,ynu,ynd,yv,yg,Ev,Vv:gateActive?section(yv).V:null,Frv:gateActive?section(yv).Fr:null,up:upstream.points,upstreamLength:upstream.physicalLength,Frnd,Fv,Fn,y2v,gateActive,m1Active,openingClear,kind:'uncontrolled',profileType:'—'};
   if(!gateActive){
     r.down=[{x:.03,y:ynu},{x:30,y:ynu}];r.xEnd=30;return r;
   }
@@ -245,10 +248,11 @@ function clampState(){
 function setTex(id,tex){const el=$(id);el.dataset.tex=tex;el.dataset.texDisplay='block';if(window.STREEM_MATH)window.STREEM_MATH.render(el,tex,true);else el.textContent=tex;}
 function setStatusTex(id,tex,klass){const el=$(id);el.className=klass;el.dataset.tex=tex;delete el.dataset.texDisplay;if(window.STREEM_MATH)window.STREEM_MATH.render(el,tex,false);else el.textContent=tex;}
 function updateReadout(r){
-  $('o-b').textContent=state.b.toFixed(2)+' m';$('o-a').textContent=fmtDepth(state.a);$('o-ynu').textContent=fmtDepth(r.ynu);$('o-condition').textContent=state.a<r.ynu?'YES':'NO';$('o-yg').textContent=fmtDepth(r.yg);$('o-yv').textContent=r.gateActive?fmtDepth(r.yv):'not formed';$('o-yc').textContent=fmtDepth(r.yc);$('o-ynd').textContent=fmtDepth(r.ynd);
+  $('o-b').textContent=state.b.toFixed(2)+' m';$('o-a').textContent=fmtDepth(state.a);$('o-ynu').textContent=fmtDepth(r.ynu);$('o-condition').textContent=r.gateActive?'YES':'NO';$('o-yg').textContent=fmtDepth(r.yg);$('o-yv').textContent=r.gateActive?fmtDepth(r.yv):'not formed';$('o-yc').textContent=fmtDepth(r.yc);$('o-ynd').textContent=fmtDepth(r.ynd);
   $('o-q').textContent=q().toFixed(4)+' m²/s';$('o-Vv').textContent=r.gateActive?f2(r.Vv)+' m/s':'—';$('o-Frv').textContent=r.gateActive?r.Frv.toFixed(2):'—';$('o-Eg').textContent=fmtDepth(r.Ev);
-  $('o-Echeck').textContent=r.gateActive?Math.abs(specific(r.yg)-specific(r.yv)).toExponential(1)+' m':'not applicable';$('o-Frnd').textContent=r.Frnd.toFixed(3);$('o-Fv').textContent=r.gateActive?r.Fv.toFixed(5)+' m²':'—';$('o-Fn').textContent=r.Fn.toFixed(5)+' m²';$('o-profile').textContent=r.profileType;
-  if(r.gateActive)setStatusTex('up-status',String.raw`a<y_{n,u}:\quad \text{M1 profile controlled by }E(y_g)=E(y_v)`,'status');
+  $('o-Echeck').textContent=r.m1Active?Math.abs(specific(r.yg)-specific(r.yv)).toExponential(1)+' m':r.gateActive?'not required':'not applicable';$('o-Frnd').textContent=r.Frnd.toFixed(3);$('o-Fv').textContent=r.gateActive?r.Fv.toFixed(5)+' m²':'—';$('o-Fn').textContent=r.Fn.toFixed(5)+' m²';$('o-profile').textContent=r.profileType;
+  if(r.m1Active)setStatusTex('up-status',String.raw`E(y_v)>E(y_{n,u}):\quad \text{M1 profile controlled by }E(y_g)=E(y_v)`,'status');
+  else if(r.gateActive)setStatusTex('up-status',String.raw`E(y_{n,u})>E(y_v):\quad \text{upstream flow remains normal; a contracted jet forms}`,'status');
   else if(r.openingClear)setStatusTex('up-status',String.raw`a\ge y_{n,u}:\quad \text{gate clear—no upstream effect}`,'status critical');
   else setStatusTex('up-status',String.raw`a<y_{n,u},\ \text{but no supercritical vena-contracta solution}`,'status critical');
   if(r.kind==='drowned'){
@@ -267,7 +271,7 @@ function updateReadout(r){
     $('o-yj').textContent='—';$('o-y2').textContent='—';$('o-hL').textContent='—';
     setStatusTex('down-status',String.raw`\text{No contracted gate jet}`,'status critical');
   }
-  if(r.gateActive&&r.kind!=='super')setTex('formula',String.raw`\begin{aligned}
+  if(r.m1Active&&r.kind!=='super')setTex('formula',String.raw`\begin{aligned}
     E&=y+\frac{q^2}{2gy^2},\qquad y_c=\left(\frac{q^2}{g}\right)^{1/3}\\
     y_v&=C_ca,\qquad E(y_g)=E(y_v)\\
     F_s(y)&=\frac{q^2}{gy}+\frac{y^2}{2}\\
@@ -275,7 +279,17 @@ function updateReadout(r){
     F_n\approx F_v&:\ \text{at vena contracta}\\
     F_n<F_v&:\ \text{pushed downstream}
   \end{aligned}`);
+  else if(r.m1Active)setTex('formula',String.raw`\begin{aligned}
+    y_{n,d}&\le y_c\quad\Longrightarrow\quad\text{no hydraulic jump}\\
+    \frac{dy}{dx}&=\frac{S_{0,d}-S_f}{1-Fr^2}\quad(${r.profileType})
+  \end{aligned}`);
+  else if(r.gateActive&&r.kind!=='super')setTex('formula',String.raw`\begin{aligned}
+    y_v&=C_ca<y_c,\qquad E(y_{n,u})>E(y_v)\\
+    &\text{upstream flow remains normal; energy is dissipated at the contraction}\\
+    F_n>F_v&:\ \text{drowned},\quad F_n\approx F_v:\ \text{at vena contracta},\quad F_n<F_v:\ \text{pushed downstream}
+  \end{aligned}`);
   else if(r.gateActive)setTex('formula',String.raw`\begin{aligned}
+    y_v&=C_ca<y_c,\qquad E(y_{n,u})>E(y_v)\\
     y_{n,d}&\le y_c\quad\Longrightarrow\quad\text{no hydraulic jump}\\
     \frac{dy}{dx}&=\frac{S_{0,d}-S_f}{1-Fr^2}\quad(${r.profileType})
   \end{aligned}`);
@@ -364,10 +378,10 @@ function drawFlume(r){
   const nominalMaxDisplay=channelLength/12,largeDepthRatio=Math.max(1,maxPhysicalDepth/Math.max(r.yc,1e-12)),maxDisplayDepth=nominalMaxDisplay*(1+Math.min(.20,.025*Math.log10(largeDepthRatio)));
   const depthDenominator=Math.max(Math.asinh(maxPhysicalDepth/Math.max(r.yc,1e-12)),1e-9),depthDisplay=y=>maxDisplayDepth*Math.asinh(Math.max(y,0)/Math.max(r.yc,1e-12))/depthDenominator;
   const upstreamNormalDisplayDepth=depthDisplay(r.ynu),gateDepthDisplay=depthDisplay(r.yg),openingDisplay=depthDisplay(state.a),criticalDepthDisplay=depthDisplay(r.yc),downstreamNormalDisplay=depthDisplay(r.ynd);
-  const physicalUpstreamBedRise=state.Su*LUP,upstreamBedRise=r.gateActive?Math.min(physicalUpstreamBedRise,Math.max(0,(gateDepthDisplay-upstreamNormalDisplayDepth)*.45)):physicalUpstreamBedRise;
+  const physicalUpstreamBedRise=state.Su*LUP,upstreamBedRise=r.m1Active?Math.min(physicalUpstreamBedRise,Math.max(0,(gateDepthDisplay-upstreamNormalDisplayDepth)*.45)):physicalUpstreamBedRise;
   const ZB=x=>x<0?upstreamBedRise*(-x/LUP):-state.Sd*x;
   const upstreamSurfaceStart=ZB(-LUP)+upstreamNormalDisplayDepth,upstreamSurfaceEnd=gateDepthDisplay,m1Denominator=Math.expm1(4);
-  const upDraw=r.up.map(p=>{if(!r.gateActive)return{x:p.x,y:upstreamNormalDisplayDepth};const t=clamp((p.x+LUP)/LUP,0,1),surface=upstreamSurfaceStart+(upstreamSurfaceEnd-upstreamSurfaceStart)*Math.expm1(4*t)/m1Denominator;return{x:p.x,y:Math.max(0,surface-ZB(p.x))};});
+  const upDraw=r.up.map(p=>{if(!r.m1Active)return{x:p.x,y:upstreamNormalDisplayDepth};const t=clamp((p.x+LUP)/LUP,0,1),surface=upstreamSurfaceStart+(upstreamSurfaceEnd-upstreamSurfaceStart)*Math.expm1(4*t)/m1Denominator;return{x:p.x,y:Math.max(0,surface-ZB(p.x))};});
   const gateTop=Math.max(gateDepthDisplay+channelLength/200,openingDisplay+channelLength/250,channelLength/45);
   const M={l:48,r:16,t:28,b:30},sx=(W-M.l-M.r)/channelLength,sy=sx,bedBaseY=clamp(H*.55,M.t+detailH+65,H-M.b-95),X=x=>M.l+(x-xmin)*sx,Y=z=>bedBaseY-z*sy;
   const downstreamLineY=depth=>px=>{const x=clamp(xmin+(px-M.l)/sx,.05,xmax);return Y(ZB(x)+depth);};
@@ -386,7 +400,7 @@ function drawFlume(r){
   roundLabel(c,'sluice gate',X(-.20)-72,34,W,H,labels);
   if(r.gateActive){
     if(r.kind!=='drowned')roundRichLabel(c,depthRuns('vena contracta','v'),X(LVC)-30,Y(ZB(LVC)+depthDisplay(r.yv))+12,W,H,12,labels);
-    roundRichLabel(c,depthRuns('M1 profile approaching upstream normal depth','n,u'),X(-LUP)+8,Y(ZB(-LUP)+upstreamNormalDisplayDepth)+28,W,H,12,labels);
+    roundRichLabel(c,depthRuns(r.m1Active?'M1 profile approaching upstream normal depth':'upstream normal depth','n,u'),X(-LUP)+8,Y(ZB(-LUP)+upstreamNormalDisplayDepth)+28,W,H,12,labels);
   }else{
     roundRichLabel(c,depthRuns('unaffected upstream normal depth','n,u'),X(-LUP)+8,Y(ZB(-LUP)+upstreamNormalDisplayDepth)+28,W,H,12,labels);
     roundLabel(c,r.openingClear?'gate clear — no hydraulic effect':'no M1 control for these inputs',X(-9),Y(upstreamNormalDisplayDepth)+60,W,H,labels);
