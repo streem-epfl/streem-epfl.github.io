@@ -176,7 +176,9 @@ function trace(y0,x0,xEnd,S){const out=[{x:x0,y:y0}],dir=Math.sign(xEnd-x0),dx=d
 function traceTo(y0,S,target){const out=[{x:LVC,y:y0}];let x=LVC,y=y0;for(let i=0;i<2500;i++){const h=.04,next=rk4(y,h,S);if((target-y)*(target-next)<=0){const f=(target-y)/(next-y||1);x+=h*f;out.push({x,y:target});return out;}x+=h;y=next;out.push({x,y});if(x>LVC+80||y>=criticalDepth()*.999)break;}out.push({x:x+4,y:target});return out;}
 function traceTowardNormal(y0,S,target){
   const out=[{x:LVC,y:y0}],initialGap=Math.abs(target-y0),tol=Math.max(initialGap*1e-4,target*1e-6,1e-8);
-  if(initialGap<=tol){out.push({x:LVC+1,y:target});return out;}
+  // Normal depth is an asymptote of the GVF solution.  Keep the terminal
+  // ordinate infinitesimally away from it; never append a finite point at y_n.
+  if(initialGap<=tol){out.push({x:LVC+1,y:y0});return out;}
   let x=LVC,y=y0;
   for(let i=0;i<12000&&x<LVC+220;i++){
     const h=.02,gap=target-y;let next=rk4(y,h,S),nextGap=target-next;
@@ -184,9 +186,8 @@ function traceTowardNormal(y0,S,target){
       const rate=Math.max(Math.abs(gvf(y,S)),1e-9),tau=clamp(Math.abs(gap)/rate,.15,45);
       next=target-gap*Math.exp(-h/tau);nextGap=target-next;
     }
-    x+=h;y=next;out.push({x,y});if(Math.abs(nextGap)<=tol){out.push({x:x+Math.max(.25,(x-LVC)*.06),y:target});break;}
+    x+=h;y=next;out.push({x,y});if(Math.abs(nextGap)<=tol)break;
   }
-  if(Math.abs(out.at(-1).y-target)>tol)out.push({x:out.at(-1).x+Math.max(.25,(out.at(-1).x-LVC)*.06),y:target});
   return out;
 }
 function traceUpstreamM1(yGate,S,target){
